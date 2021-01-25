@@ -39,10 +39,15 @@ ANN_GQRS_LEAD1_FILE=$RECORD_WORK_FILE.$ANN_GQRS_LEAD1
 ANN_ECGPU_LEAD0_FILE=$RECORD_WORK_FILE.$ANN_ECGPU_LEAD0
 ANN_ECGPU_LEAD1_FILE=$RECORD_WORK_FILE.$ANN_ECGPU_LEAD1
 
-RR_GQRS_LEAD0_FILE=$RECORD_WORK_FILE.$ANN_GQRS_LEAD0.rr.txt
-RR_GQRS_LEAD1_FILE=$RECORD_WORK_FILE.$ANN_GQRS_LEAD1.rr.txt
-RR_ECGPU_LEAD0_FILE=$RECORD_WORK_FILE.$ANN_ECGPU_LEAD0.rr.txt
-RR_ECGPU_LEAD1_FILE=$RECORD_WORK_FILE.$ANN_ECGPU_LEAD1.rr.txt
+RR_GQRS_LEAD0_FILE=$RECORD_WORK_FILE.$ANN_GQRS_LEAD0.rr
+RR_GQRS_LEAD1_FILE=$RECORD_WORK_FILE.$ANN_GQRS_LEAD1.rr
+RR_ECGPU_LEAD0_FILE=$RECORD_WORK_FILE.$ANN_ECGPU_LEAD0.rr
+RR_ECGPU_LEAD1_FILE=$RECORD_WORK_FILE.$ANN_ECGPU_LEAD1.rr
+
+RR_GQRS_LEAD0_KUBIOS_FILE=$RECORD_WORK_FILE.$ANN_GQRS_LEAD0.rr.kubios.txt
+RR_GQRS_LEAD1_KUBIOS_FILE=$RECORD_WORK_FILE.$ANN_GQRS_LEAD1.rr.kubios.txt
+RR_ECGPU_LEAD0_KUBIOS_FILE=$RECORD_WORK_FILE.$ANN_ECGPU_LEAD0.rr.kubios.txt
+RR_ECGPU_LEAD1_KUBIOS_FILE=$RECORD_WORK_FILE.$ANN_ECGPU_LEAD1.rr.kubios.txt
 
 SAMPLES_FILE=$RECORD_WORK_FILE.samples
 
@@ -103,16 +108,27 @@ rm fort.20 fort.21
 echo ""
 echo " * ann2rr... (annotation -QRS- to RR intervals)"
 echo " ---------------------------------------------------------"
+# for Kubios
 #
 # IMPORTANT: if '-p N'' => only NN intervals
 #
-ann2rr -r $RECORD_WORK_ID -a $ANN_GQRS_LEAD0 -i s -V s > $RR_GQRS_LEAD0_FILE
+ann2rr -r $RECORD_WORK_ID -a $ANN_GQRS_LEAD0 -i s -V s > $RR_GQRS_LEAD0_KUBIOS_FILE
 if [[ $? -ne 0 ]]; then echo "Error: ann2rr lead 0"; exit 1; fi 
-ann2rr -r $RECORD_WORK_ID -a $ANN_GQRS_LEAD1 -i s -V s > $RR_GQRS_LEAD1_FILE
+ann2rr -r $RECORD_WORK_ID -a $ANN_GQRS_LEAD1 -i s -V s > $RR_GQRS_LEAD1_KUBIOS_FILE
 if [[ $? -ne 0 ]]; then echo "Error: ann2rr lead 1"; exit 1; fi 
-ann2rr -r $RECORD_WORK_ID -a $ANN_ECGPU_LEAD0 -i s -V s  > $RR_ECGPU_LEAD0_FILE
+ann2rr -r $RECORD_WORK_ID -a $ANN_ECGPU_LEAD0 -i s -V s  > $RR_ECGPU_LEAD0_KUBIOS_FILE
 if [[ $? -ne 0 ]]; then echo "Error: ecgpu lead 0"; exit 1; fi 
-ann2rr -r $RECORD_WORK_ID -a $ANN_ECGPU_LEAD1 -i s -V s  > $RR_ECGPU_LEAD1_FILE
+ann2rr -r $RECORD_WORK_ID -a $ANN_ECGPU_LEAD1 -i s -V s  > $RR_ECGPU_LEAD1_KUBIOS_FILE
+if [[ $? -ne 0 ]]; then echo "Error: ecgpu lead 0"; exit 1; fi 
+
+# for record-viewer
+ann2rr -r $RECORD_WORK_ID -a $ANN_GQRS_LEAD0 > $RR_GQRS_LEAD0_FILE
+if [[ $? -ne 0 ]]; then echo "Error: ann2rr lead 0"; exit 1; fi 
+ann2rr -r $RECORD_WORK_ID -a $ANN_GQRS_LEAD1 > $RR_GQRS_LEAD1_FILE
+if [[ $? -ne 0 ]]; then echo "Error: ann2rr lead 1"; exit 1; fi 
+ann2rr -r $RECORD_WORK_ID -a $ANN_ECGPU_LEAD0 > $RR_ECGPU_LEAD0_FILE
+if [[ $? -ne 0 ]]; then echo "Error: ecgpu lead 0"; exit 1; fi 
+ann2rr -r $RECORD_WORK_ID -a $ANN_ECGPU_LEAD1 > $RR_ECGPU_LEAD1_FILE
 if [[ $? -ne 0 ]]; then echo "Error: ecgpu lead 0"; exit 1; fi 
 
 echo ""
@@ -120,7 +136,7 @@ echo " * rdsamp... (read samples to text)"
 echo " ---------------------------------------------------------"
 # -p: convert to sample unit (including time in sec)
 # all samples in one files
-rdsamp -r $RECORD_WORK_ID -p -v > $SAMPLES_FILE
+rdsamp -r $RECORD_WORK_ID -P -v > $SAMPLES_FILE
 if [[ $? -ne 0 ]]; then echo "Error: rdsamp lead 0"; exit 1; fi 
 #rdsamp -r $RECORD_WORK_ID -p -s 1 > $SAMP_LEAD1_FILE
 #if [[ $? -ne 0 ]]; then echo "Error: rdsamp lead 0"; exit 1; fi 
