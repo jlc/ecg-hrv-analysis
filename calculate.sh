@@ -33,6 +33,7 @@ ANN_GQRS_LEAD1=ann-gqrs-s1
 ANN_ECGPU_LEAD0=ann-ecgpu-s0 
 ANN_ECGPU_LEAD1=ann-ecgpu-s1 
 
+# OUTPUTS (in data/work)
 ANN_GQRS_LEAD0_FILE=$RECORD_WORK_FILE.$ANN_GQRS_LEAD0
 ANN_GQRS_LEAD1_FILE=$RECORD_WORK_FILE.$ANN_GQRS_LEAD1
 ANN_ECGPU_LEAD0_FILE=$RECORD_WORK_FILE.$ANN_ECGPU_LEAD0
@@ -42,6 +43,11 @@ RR_GQRS_LEAD0_FILE=$RECORD_WORK_FILE.$ANN_GQRS_LEAD0.rr.txt
 RR_GQRS_LEAD1_FILE=$RECORD_WORK_FILE.$ANN_GQRS_LEAD1.rr.txt
 RR_ECGPU_LEAD0_FILE=$RECORD_WORK_FILE.$ANN_ECGPU_LEAD0.rr.txt
 RR_ECGPU_LEAD1_FILE=$RECORD_WORK_FILE.$ANN_ECGPU_LEAD1.rr.txt
+
+SAMPLES_FILE=$RECORD_WORK_FILE.samples
+
+# OUTPUTS (in data/)
+WFDB_DESC_FILE=$RECORD_FILE.desc
 
 OUTPUT_FILE=$RECORD_FILE.output-hrv.txt
 DATE=`date`
@@ -65,15 +71,18 @@ DATE=`date`
 
 
 echo ""
-echo " ---------------------------------------------------------"
-echo " * edf2mit..."
+echo " * edf2mit... (Convert EDF to MIT format)"
 echo " ---------------------------------------------------------"
 edf2mit -i $EDF_FILE -r $RECORD_WORK_ID
 if [[ $? -ne 0 ]]; then echo "Error: edf2mit"; exit 1; fi 
 
+echo ""
+echo " * wfdbdesc... (Describe freshly converted WFDB)"
+echo " ---------------------------------------------------------"
+wfdbdesc $RECORD_WORK_ID > $WFDB_DESC_FILE
+if [[ $? -ne 0 ]]; then echo "Error: wfdbdesc failed"; exit 1; fi 
 
 echo ""
-echo " ---------------------------------------------------------"
 echo " * gqrs..."
 echo " ---------------------------------------------------------"
 gqrs -r $RECORD_WORK_ID -o $ANN_GQRS_LEAD0 -s 0 
@@ -83,7 +92,6 @@ if [[ $? -ne 0 ]]; then echo "Error: gqrs lead 1"; exit 1; fi
 
 
 echo ""
-echo " ---------------------------------------------------------"
 echo " * ecgpu..."
 echo " ---------------------------------------------------------"
 ecgpuwave -r $RECORD_WORK_ID -a $ANN_ECGPU_LEAD0 -s 0
@@ -93,20 +101,32 @@ if [[ $? -ne 0 ]]; then echo "Error: ecgpu lead 1"; exit 1; fi
 rm fort.20 fort.21
 
 echo ""
+echo " * ann2rr... (annotation -QRS- to RR intervals)"
 echo " ---------------------------------------------------------"
-echo " * ann2rr..."
-echo " ---------------------------------------------------------"
-ann2rr -r $RECORD_WORK_ID -a $ANN_GQRS_LEAD0 -i s -V s -p N > $RR_GQRS_LEAD0_FILE
+#
+# IMPORTANT: if '-p N'' => only NN intervals
+#
+ann2rr -r $RECORD_WORK_ID -a $ANN_GQRS_LEAD0 -i s -V s > $RR_GQRS_LEAD0_FILE
 if [[ $? -ne 0 ]]; then echo "Error: ann2rr lead 0"; exit 1; fi 
-ann2rr -r $RECORD_WORK_ID -a $ANN_GQRS_LEAD1 -i s -V s -p N > $RR_GQRS_LEAD1_FILE
+ann2rr -r $RECORD_WORK_ID -a $ANN_GQRS_LEAD1 -i s -V s > $RR_GQRS_LEAD1_FILE
 if [[ $? -ne 0 ]]; then echo "Error: ann2rr lead 1"; exit 1; fi 
-ann2rr -r $RECORD_WORK_ID -a $ANN_ECGPU_LEAD0 -i s -V s -p N > $RR_ECGPU_LEAD0_FILE
+ann2rr -r $RECORD_WORK_ID -a $ANN_ECGPU_LEAD0 -i s -V s  > $RR_ECGPU_LEAD0_FILE
 if [[ $? -ne 0 ]]; then echo "Error: ecgpu lead 0"; exit 1; fi 
-ann2rr -r $RECORD_WORK_ID -a $ANN_ECGPU_LEAD1 -i s -V s -p N > $RR_ECGPU_LEAD1_FILE
+ann2rr -r $RECORD_WORK_ID -a $ANN_ECGPU_LEAD1 -i s -V s  > $RR_ECGPU_LEAD1_FILE
 if [[ $? -ne 0 ]]; then echo "Error: ecgpu lead 0"; exit 1; fi 
 
 echo ""
+echo " * rdsamp... (read samples to text)"
 echo " ---------------------------------------------------------"
+# -p: convert to sample unit (including time in sec)
+# all samples in one files
+rdsamp -r $RECORD_WORK_ID -p -v > $SAMPLES_FILE
+if [[ $? -ne 0 ]]; then echo "Error: rdsamp lead 0"; exit 1; fi 
+#rdsamp -r $RECORD_WORK_ID -p -s 1 > $SAMP_LEAD1_FILE
+#if [[ $? -ne 0 ]]; then echo "Error: rdsamp lead 0"; exit 1; fi 
+
+
+echo ""
 echo " * get_hrv short..."
 echo " ---------------------------------------------------------"
 
@@ -144,13 +164,11 @@ if [[ $? -ne 0 ]]; then echo "Error: get_hrv ecgpu lead 1"; exit 1; fi
 
 # again but all lines
 echo ""
-echo " ---------------------------------------------------------"
 echo " * get_hrv long..."
 echo " ---------------------------------------------------------"
 
 echo "" >> $OUTPUT_FILE
-echo " ---------------------------------------" >> $OUTPUT_FILE
-echo " ---------------------------------------" >> $OUTPUT_FILE
+echo "-------------------------------------------------------------------------------------" >> $OUTPUT_FILE
 
 GET_HRV_OPTS=""
 
@@ -182,9 +200,7 @@ echo "---------------" >> $OUTPUT_FILE
 get_hrv $GET_HRV_OPTS -R $RR_ECGPU_LEAD1_FILE >> $OUTPUT_FILE
 if [[ $? -ne 0 ]]; then echo "Error: get_hrv ecgpu lead 1"; exit 1; fi 
 echo ""
-echo " ---------------------------------------------------------"
 echo "done."
-echo " ---------------------------------------------------------"
 exit 0
 
 # edf2mit -i e63w4ulrq3o2b32pv3u9avw2p.atc.edf -r e63w4ulrq3o2b32pv3u9avw2p
