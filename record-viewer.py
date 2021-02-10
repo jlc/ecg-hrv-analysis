@@ -18,6 +18,8 @@ CURR_DIR = os.path.dirname(os.path.realpath(__file__))
 
 gDebug = False
 
+"""
+read .rr files --> NOT NEEDED ANYMORE : require conversion
 def readRR(rrCsvFile, times, sampleValues): # ( [id1, id2, ...], [time1, time2, ...], [value1, value2, ...] )
   recordIds = []
   values = []
@@ -33,14 +35,22 @@ def readRR(rrCsvFile, times, sampleValues): # ( [id1, id2, ...], [time1, time2, 
       rrTimes.append(t) 
       values.append(v)
 
-  """
-  print("DEBUG: readRR: csv file: %s" % (rrCsvFile))
-  for i in range(10):
-    print("time: %f: %f" % (times[i], values[i]))
-  """
-
   return recordIds, rrTimes, values
+"""
 
+def readKubiosRR(rrKubiosCsvFile): # ([time1, time2, ...], [value1, value2, ...])
+  rrTimes = []
+  values = []
+  
+  with open(rrKubiosCsvFile, newline='') as rrfile:
+    reader = csv.reader(rrfile, delimiter="\t")
+    for row in reader:
+      t = float(row[0].strip())
+      v = float(row[1].strip())
+      rrTimes.append(t)
+      values.append(v)
+
+  return rrTimes, values
 
 def readSamples(samplesCsvFile): # ( [sec1, sec2, ...], samples{'title': [values, ...], ...} )
   samples = {}
@@ -103,48 +113,120 @@ def plotAllSignals(times, samples):
 
   plt.show()
 
-  """
-  plt.plot(samples['time'], samples['leadII'], label='leadII')
-  plt.xlabel('time')
-  plt.ylabel('mV')
-  plt.title("Le joli plot")
-  plt.legend()
-  plt.show()
-  """
-
 def plotRR(times, sample, rrTimes, rrValues, title, lead, rrLabel):
+
+  yMin = min(sample)
+  yMax = max(sample)
 
   plt.plot(times, sample, label=lead)
   plt.plot(rrTimes, rrValues, 'x', label=rrLabel, color="orange")
+  plt.vlines(x=rrTimes, ymin=yMin, ymax=yMax, color="orange")
   plt.xlabel('time')
   plt.ylabel('mV')
   plt.title(title)
   plt.legend()
   plt.show()
 
+def plot2LeadsWithRR(leadTitle, times, samples, rr1Title, rr1Times, rr1Values, rr2Title, rr2Times, rr2Values):
+  yMin = min(samples)
+  yMax = max(samples)
+
+  fig, ax = plt.subplots(2)
+  
+  ax[0].plot(times, samples, label=leadTitle)
+  ax[0].plot(rr1Times, rr1Values, 'x', label=rr1Title, color="orange")
+  ax[0].vlines(x=rr1Times, ymin=yMin, ymax=yMax, color="orange")
+  ax[0].set_xlabel('time')
+  ax[0].set_ylabel('mV')
+  ax[0].set_title(leadTitle + " - " + rr1Title)
+  ax[0].legend()
+
+  ax[1].plot(times, samples, label=leadTitle)
+  ax[1].plot(rr2Times, rr2Values, 'x', label=rr2Title, color="orange")
+  ax[1].vlines(x=rr2Times, ymin=yMin, ymax=yMax, color="orange")
+  ax[1].set_xlabel('time')
+  ax[1].set_ylabel('mV')
+  ax[1].set_title(leadTitle + " - " + rr2Title)
+  ax[1].legend()
+
+  plt.show()
+
+  #fig, ax = plt.subplots(1)
+
+  color2 = "green"
+  color1 = "red"
+  plt.plot(times, samples, label=leadTitle)
+  plt.plot(rr1Times, rr1Values, 'x', label=rr1Title, color=color1)
+  plt.vlines(x=rr1Times, ymin=yMin, ymax=yMax, color=color1)
+  plt.plot(rr2Times, rr2Values, 'x', label=rr2Title, color=color2)
+  plt.vlines(x=rr2Times, ymin=yMin, ymax=yMax, color=color2)
+  plt.xlabel('time')
+  plt.ylabel('mV')
+  plt.title(leadTitle + " - " + rr1Title + " - " + rr2Title)
+  plt.legend()
+
+  plt.show()
+
+
+# FUNCTIONS TO IMPLEMENTS:
 """
-- plot normal: 6 signals one below the other
-- plot normal: lead 1 and 2 with RR
+X plot normal: 6 signals one below the other
+X plot normal: lead 1 and 2 with RR
 - plot compare: (atc signals &&) edf signals && rdsamp signals
 """
+
 
 def main():
 
   ap = argparse.ArgumentParser()
   ap.add_argument("-r", "--recordName", required=True, help="record name") # type=int, default=42, action=
   ap.add_argument("-v", "--verbose", action='store_true', help="print verbose")
+  ap.add_argument("-6", "--plot-6-signals", action='store_true', help="Plot 6 signals one below the other")
+  ap.add_argument("-2rr", "--plot-leadII-with-rr-gqrs-ecgpu", action="store_true", help="Plot leadII with both GQRS and ECGPU")
   args = vars(ap.parse_args())
 
   gDebug = args['verbose']
+  doPlot6Signals = args['plot_6_signals']
+  doPlotLeadIIWithRRs = args['plot_leadII_with_rr_gqrs_ecgpu']
 
-  print("CURR_DIR: ", CURR_DIR)
-  print("recordName: ", args['recordName'])
+  #print("CURR_DIR: ", CURR_DIR)
+  #print("recordName: ", args['recordName'])
 
   samplesCsvFile = CURR_DIR + "/" + args['recordName'] + ".samples"
 
   times, samples = readSamples(samplesCsvFile)
-  #plotAllSignals(times, samples)
 
+  if doPlot6Signals:
+    print(" *** Plotting 6 signals")
+    plotAllSignals(times, samples)
+
+
+  if doPlotLeadIIWithRRs:
+    print(" *** Plotting LeadII with GQRS and ECGPU")
+    rrKubiosGqrsLead1File = CURR_DIR + "/" + args['recordName'] + ".ann-gqrs-s0.rr.kubios.txt"
+    rrKubiosGqrsLead2File = CURR_DIR + "/" + args['recordName'] + ".ann-gqrs-s1.rr.kubios.txt"
+    rrKubiosEcgpuLead1File = CURR_DIR + "/" + args['recordName'] + ".ann-ecgpu-s0.rr.kubios.txt"
+    rrKubiosEcgpuLead2File = CURR_DIR + "/" + args['recordName'] + ".ann-ecgpu-s1.rr.kubios.txt"
+
+    timesGqrsLead1, valuesGqrsLead1 = readKubiosRR(rrKubiosGqrsLead1File)
+    timesGqrsLead2, valuesGqrsLead2 = readKubiosRR(rrKubiosGqrsLead2File)
+    timesEcgpuLead1, valuesEcgpuLead1 = readKubiosRR(rrKubiosEcgpuLead1File)
+    timesEcgpuLead2, valuesEcgpuLead2 = readKubiosRR(rrKubiosEcgpuLead2File)
+
+    print("INFO: LeadII: number of annotations in GQRS: %d" % (len(timesGqrsLead2)))
+    print("INFO: LeadII: number of annotations in ECGPU: %d" % (len(timesEcgpuLead2)))
+
+    plot2LeadsWithRR("leadII", times, samples['leadII'],
+                      "GQRS", timesGqrsLead2, valuesGqrsLead2,
+                      "ECGPU", timesEcgpuLead2, valuesEcgpuLead2)
+
+  """
+  plotRR(times, samples['leadI'], timesGqrsLead1, valuesGqrsLead1, "LeadI - GQRS", "leadI", "gqrs")
+  plotRR(times, samples['leadII'], timesGqrsLead2, valuesGqrsLead2, "LeadII - GQRS", "leadII", "gqrs")
+  plotRR(times, samples['leadI'], timesEcgpuLead1, valuesEcgpuLead1, "LeadI - ECGPU", "leadI", "ecgpu")
+  plotRR(times, samples['leadII'], timesEcgpuLead2, valuesEcgpuLead2, "LeadII - ECGPU", "leadII", "ecgpu")
+  """
+  """
   rrGqrsLead1File = CURR_DIR + "/" + args['recordName'] + ".ann-gqrs-s0.rr"
   rrGqrsLead2File = CURR_DIR + "/" + args['recordName'] + ".ann-gqrs-s1.rr"
   rrEcgpuLead1File = CURR_DIR + "/" + args['recordName'] + ".ann-ecgpu-s0.rr"
@@ -154,13 +236,10 @@ def main():
   recordIdsGqrsLead2, timesGqrsLead2, valuesGqrsLead2 = readRR(rrGqrsLead2File, times, samples['leadII'])
   recordIdsEcgpuLead1, timesEcgpuLead1, valuesEcgpuLead1 = readRR(rrEcgpuLead1File, times, samples['leadI'])
   recordIdsEcgpuLead2, timesEcgpuLead2, valuesEcgpuLead2 = readRR(rrEcgpuLead2File, times, samples['leadII'])
+  """
 
-  plotRR(times, samples['leadI'], timesGqrsLead1, valuesGqrsLead1, "LeadI - GQRS", "leadI", "gqrs")
-  plotRR(times, samples['leadII'], timesGqrsLead2, valuesGqrsLead2, "LeadII - GQRS", "leadII", "gqrs")
-  plotRR(times, samples['leadI'], timesEcgpuLead1, valuesEcgpuLead1, "LeadI - ECGPU", "leadI", "ecgpu")
-  plotRR(times, samples['leadII'], timesEcgpuLead2, valuesEcgpuLead2, "LeadII - ECGPU", "leadII", "ecgpu")
 
-  return 1
+  return 0
 
 if __name__ == "__main__":
   ret = main()

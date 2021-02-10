@@ -110,6 +110,8 @@ echo " * ann2rr... (annotation -QRS- to RR intervals)"
 echo " ---------------------------------------------------------"
 # for Kubios
 #
+# -i FMT  print intervals using format FMT (see below for values of FMT)
+# -V FMT  print times of beginnings of intervals using format FMT (see below)
 # IMPORTANT: if '-p N'' => only NN intervals
 #
 ann2rr -r $RECORD_WORK_ID -a $ANN_GQRS_LEAD0 -i s -V s > $RR_GQRS_LEAD0_KUBIOS_FILE
@@ -122,6 +124,7 @@ ann2rr -r $RECORD_WORK_ID -a $ANN_ECGPU_LEAD1 -i s -V s  > $RR_ECGPU_LEAD1_KUBIO
 if [[ $? -ne 0 ]]; then echo "Error: ecgpu lead 0"; exit 1; fi 
 
 # for record-viewer
+# By default, the output contains the RR intervals only
 ann2rr -r $RECORD_WORK_ID -a $ANN_GQRS_LEAD0 > $RR_GQRS_LEAD0_FILE
 if [[ $? -ne 0 ]]; then echo "Error: ann2rr lead 0"; exit 1; fi 
 ann2rr -r $RECORD_WORK_ID -a $ANN_GQRS_LEAD1 > $RR_GQRS_LEAD1_FILE
@@ -135,6 +138,7 @@ echo ""
 echo " * rdsamp... (read samples to text)"
 echo " ---------------------------------------------------------"
 # -p: convert to sample unit (including time in sec)
+# -P          same as -p, but with greater precision
 # all samples in one files
 rdsamp -r $RECORD_WORK_ID -P -v > $SAMPLES_FILE
 if [[ $? -ne 0 ]]; then echo "Error: rdsamp lead 0"; exit 1; fi 
