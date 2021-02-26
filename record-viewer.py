@@ -7,12 +7,16 @@ import json
 import datetime
 import argparse
 import csv
+import datetime
 
 import numpy
 import pyedflib
 
 from pyedflib import highlevel
 import matplotlib.pyplot as plt
+
+from hrvanalysis import remove_outliers, remove_ectopic_beats, interpolate_nan_values, get_time_domain_features, get_frequency_domain_features, get_poincare_plot_features, plot_poincare
+
 
 CURR_DIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -127,7 +131,7 @@ def plotRR(times, sample, rrTimes, rrValues, title, lead, rrLabel):
   plt.legend()
   plt.show()
 
-def plot2LeadsWithRR(leadTitle, times, samples, rr1Title, rr1Times, rr1Values, rr2Title, rr2Times, rr2Values):
+def plotLeadWithRR(leadTitle, times, samples, rr1Title, rr1Times, rr1Values, rr2Title, rr2Times, rr2Values):
   yMin = min(samples)
   yMax = max(samples)
 
@@ -153,8 +157,8 @@ def plot2LeadsWithRR(leadTitle, times, samples, rr1Title, rr1Times, rr1Values, r
 
   #fig, ax = plt.subplots(1)
 
-  color2 = "green"
-  color1 = "red"
+  color2 = "red"
+  color1 = "orange"
   plt.plot(times, samples, label=leadTitle)
   plt.plot(rr1Times, rr1Values, 'x', label=rr1Title, color=color1)
   plt.vlines(x=rr1Times, ymin=yMin, ymax=yMax, color=color1)
@@ -175,6 +179,88 @@ X plot normal: lead 1 and 2 with RR
 - plot compare: (atc signals &&) edf signals && rdsamp signals
 """
 
+def hrvAnalysis(times, samples, rrTimes, rrValues):
+
+  def listSecToMsec(secs):
+    msecs = []
+    for i in range(len(secs)):
+      msecs.append( int(secs[i] * 1000) )
+    return msecs
+
+  def listMsecToSec(msecs):
+    secs = []
+    for i in range(len(msecs)):
+      secs.append( float(msecs[i]) / 1000)
+    return secs
+
+  rrValuesMsec = listSecToMsec(rrValues)
+ 
+  """
+  # This remove outliers from signal
+  rr_intervals_without_outliers = remove_outliers(rr_intervals=rrValuesMsec,
+                                                  low_rri=300, high_rri=2000)
+
+  # This replace outliers nan values with linear interpolation
+  interpolated_rr_intervals = interpolate_nan_values(rr_intervals=rr_intervals_without_outliers,
+                                                     interpolation_method="linear")
+
+
+  # This remove ectopic beats from signal
+  nn_intervals_list = remove_ectopic_beats(rr_intervals=interpolated_rr_intervals, method="malik")
+
+  # This replace ectopic beats nan values with linear interpolation
+  interpolated_nn_intervals = interpolate_nan_values(rr_intervals=nn_intervals_list)
+
+  time_domain_features = get_time_domain_features(interpolated_nn_intervals)
+  """
+
+  time_domain_features = get_time_domain_features(rrValuesMsec)
+
+  print("")
+  print("TIME DOMAIN FEATURES:")
+  for k in time_domain_features.keys():
+    v = time_domain_features[k]
+    print(" %s : %f" % (k, v))
+
+  freq_domain_features = get_frequency_domain_features(rrValuesMsec)
+
+  print("")
+  print("FREQUENCY DOMAIN FEATURES:")
+  for k in freq_domain_features.keys():
+    v = freq_domain_features[k]
+    print(" %s : %f" % (k, v))
+
+  poincare_plot_features = get_poincare_plot_features(rrValuesMsec)
+
+  print("")
+  print("POINCARE PLOT FEATURES:")
+  for k in poincare_plot_features.keys():
+    v = poincare_plot_features[k]
+    print(" %s : %f" % (k, v))
+
+  plot_poincare(rrValuesMsec, plot_sd_features=True)
+
+  """
+  def rrToTimes(rrList):
+    times = []
+    prevTime = 0.0 
+    for i in range(len(rrList)):
+      t = prevTime + rrList[i]
+      times.append(t)
+      prevTime = t 
+    return times
+
+  timesInterpolatedNNIntervals = rrToTimes(interpolated_nn_intervals)
+  """
+
+  """
+  plotLeadWithRR("leadII", times, samples,
+                    "ECGPU", rrTimes, rrValues,
+                    "clean", listMsecToSec(timesInterpolatedNNIntervals), rrValues)
+  """
+
+
+  return True 
 
 def main():
 
@@ -183,18 +269,25 @@ def main():
   ap.add_argument("-v", "--verbose", action='store_true', help="print verbose")
   ap.add_argument("-6", "--plot-6-signals", action='store_true', help="Plot 6 signals one below the other")
   ap.add_argument("-2rr", "--plot-leadII-with-rr-gqrs-ecgpu", action="store_true", help="Plot leadII with both GQRS and ECGPU")
+  ap.add_argument("-hrv", "--print-hrv-features", action="store_true", help="Show HRV features (by hrv-analysis lib)")
   args = vars(ap.parse_args())
 
   gDebug = args['verbose']
   doPlot6Signals = args['plot_6_signals']
   doPlotLeadIIWithRRs = args['plot_leadII_with_rr_gqrs_ecgpu']
+  doPrintHrvFeatures = args['print_hrv_features']
 
   #print("CURR_DIR: ", CURR_DIR)
   #print("recordName: ", args['recordName'])
 
-  samplesCsvFile = CURR_DIR + "/" + args['recordName'] + ".samples"
+  samplesCsvFile = CURR_DIR + "/" + args['recordName'] + ".samples.txt"
+  rrKubiosGqrsLead2File = CURR_DIR + "/" + args['recordName'] + ".ann-gqrs-s1.rr.kubios.txt"
+  rrKubiosEcgpuLead2File = CURR_DIR + "/" + args['recordName'] + ".ann-ecgpu-s1.rr.kubios.txt"
 
   times, samples = readSamples(samplesCsvFile)
+
+  timesGqrsLead2, valuesGqrsLead2 = readKubiosRR(rrKubiosGqrsLead2File)
+  timesEcgpuLead2, valuesEcgpuLead2 = readKubiosRR(rrKubiosEcgpuLead2File)
 
   if doPlot6Signals:
     print(" *** Plotting 6 signals")
@@ -203,22 +296,29 @@ def main():
 
   if doPlotLeadIIWithRRs:
     print(" *** Plotting LeadII with GQRS and ECGPU")
-    rrKubiosGqrsLead1File = CURR_DIR + "/" + args['recordName'] + ".ann-gqrs-s0.rr.kubios.txt"
-    rrKubiosGqrsLead2File = CURR_DIR + "/" + args['recordName'] + ".ann-gqrs-s1.rr.kubios.txt"
-    rrKubiosEcgpuLead1File = CURR_DIR + "/" + args['recordName'] + ".ann-ecgpu-s0.rr.kubios.txt"
-    rrKubiosEcgpuLead2File = CURR_DIR + "/" + args['recordName'] + ".ann-ecgpu-s1.rr.kubios.txt"
-
-    timesGqrsLead1, valuesGqrsLead1 = readKubiosRR(rrKubiosGqrsLead1File)
-    timesGqrsLead2, valuesGqrsLead2 = readKubiosRR(rrKubiosGqrsLead2File)
-    timesEcgpuLead1, valuesEcgpuLead1 = readKubiosRR(rrKubiosEcgpuLead1File)
-    timesEcgpuLead2, valuesEcgpuLead2 = readKubiosRR(rrKubiosEcgpuLead2File)
 
     print("INFO: LeadII: number of annotations in GQRS: %d" % (len(timesGqrsLead2)))
     print("INFO: LeadII: number of annotations in ECGPU: %d" % (len(timesEcgpuLead2)))
 
-    plot2LeadsWithRR("leadII", times, samples['leadII'],
+
+    plotLeadWithRR("leadII", times, samples['leadII'],
                       "GQRS", timesGqrsLead2, valuesGqrsLead2,
                       "ECGPU", timesEcgpuLead2, valuesEcgpuLead2)
+    """
+    plotLeadWithRR("leadII", times, samples['leadII'],
+                      "GQRS", timesGqrsLead2, valuesGqrsLead2,
+                      "Filtered GQRS", filtTimesGqrsLead2, filtValuesGqrsLead2)
+
+    plotLeadWithRR("leadII", times, samples['leadII'],
+                      "ECGPU", timesEcgpuLead2, valuesEcgpuLead2,
+                      "Filtered ECGPU", filtTimesEcgpuLead2, filtValuesEcgpuLead2)
+    """
+
+  if doPrintHrvFeatures:
+    print(" *** HRV Features")
+
+    hrvAnalysis(times, samples['leadII'], timesEcgpuLead2, valuesEcgpuLead2)
+
 
   """
   plotRR(times, samples['leadI'], timesGqrsLead1, valuesGqrsLead1, "LeadI - GQRS", "leadI", "gqrs")
@@ -250,153 +350,4 @@ if __name__ == "__main__":
 #####################################################
 #####################################################
 #####################################################
-
-def convertAtc2Dict(filename):
-  os.environ['GOPATH'] =  CURR_DIR + '/dependencies/atc2json/'
-
-  cmdConvertAtc2Json = "go run %s/dependencies/atc2json/main.go < %s" % (CURR_DIR, filename)
-
-  if gDebug: print(" - converting ATC to json using: '%s'" % (cmdConvertAtc2Json))
-
-  res = subprocess.check_output(cmdConvertAtc2Json, shell=True)
-  resJson = res.decode('utf-8')
-
-  d = json.loads(resJson)
-  return d 
-
-def convertAtcDict2Edf(edfFilename, atcDict):
-  dimension = 'mV'
-  sampleRate = atcDict['frequency']
-  amplitudeResolution = atcDict['amplitudeResolution']
-  mainsFrequency = atcDict['mainsFrequency']
-  gain = atcDict['gain']
-
-  def listOfIntToString(data):
-    out = ""
-    for i in range(len(data)):
-      if(data[i] and data[i] is not None): out += chr(data[i])
-    return out[:]
-
-  dateRecorded = listOfIntToString(atcDict['Info']['DateRecorded'])
-  dateTimeRecorded = datetime.datetime.strptime(dateRecorded, "%Y-%m-%dT%H:%M:%S%z")
-  recordingUUID = listOfIntToString(atcDict['Info']['RecordingUUID'])
-  phoneUDID = listOfIntToString(atcDict['Info']['PhoneUDID'])
-  phoneModel = listOfIntToString(atcDict['Info']['PhoneModel'])
-  recorderSoftware = listOfIntToString(atcDict['Info']['RecorderSoftware'])
-  recorderHardware = listOfIntToString(atcDict['Info']['RecorderHardware'])
-  location = listOfIntToString(atcDict['Info']['Location'])
-
-  def debugInfos():
-    print("dateRecorded: " + dateRecorded)
-    print("dateTimeRecorded: " + str(dateTimeRecorded))
-    print("recordingUUID: " + recordingUUID)
-    print("phoneUDID: " + phoneUDID)
-    print("phoneModel: " + phoneModel)
-    print("recorderSoftware: " + recorderSoftware)
-    print("recorderHardware: " + recorderHardware)
-    print("location: " + location)
-  #debugInfo()
-  
-  def convertDigitalToAnalog(digitalSamples, amplitudeResolution):
-    # from: https://developers.kardia.com/#ecg-samples-object
-    # "To convert to millivolts, divide these samples by (1e6 / amplitudeResolution)."
-    out = []
-    divider = float(1e6) / float(amplitudeResolution)
-    for i in range(len(digitalSamples)):
-      mV = float(digitalSamples[i]) / divider
-      out.append(mV)
-    return out
-
-  channels = ['leadI', 'leadII', 'leadIII', 'aVR', 'aVL', 'aVF']
-  nbChannelsHere = 0 
-  for chan in channels:
-    if chan in atcDict['samples']:
-      nbChannelsHere += 1 
-
-  f = pyedflib.EdfWriter(edfFilename, nbChannelsHere, file_type=pyedflib.FILETYPE_EDF)
-
-  #f.setEquipment(recorderHardware + " " + recorderSoftware + " (" + phoneModel + ")")
-  f.setEquipment(recorderSoftware + "(on " + phoneModel + ")")
-  f.setStartdatetime(dateTimeRecorded)
-  f.setPatientCode(recordingUUID)
-
-  channelInfo = []
-  dataList = []
-
-  edfsignal = 0
-  nbChannelsLeft = len(channels)
-  channelsAdded = ""
-
-  for chan in channels:
-    nbChannelsLeft -= 1
-
-    if chan in atcDict['samples']:
-      chDict = {'label':chan, 'dimension':dimension, 'sample_rate':int(sampleRate),
-                'physical_max':16.38, 'physical_min':-16.38, 'digital_max':32767, 'digital_min':-32768, 'transducer':'', 'prefilter': ''}
-
-      #print("DEBUG: setSignalHeader( %d, %s)" % (edfsignal, str(chDict)))
-      f.setSignalHeader(edfsignal, chDict)
-      f.setLabel(edfsignal, chan)
-      f.setSamplefrequency(edfsignal, int(sampleRate))
-
-      channelInfo.append(chDict)
-
-      ar = numpy.array(convertDigitalToAnalog(atcDict['samples'][chan], amplitudeResolution))
-      dataList.append(ar)
-
-      edfsignal += 1
-
-      channelsAdded += chan + ', ' if nbChannelsLeft else chan 
-
-  #f.setRecordingAdditional()
-  #f.setSignalHeaders(channelInfo)
-  f.writeSamples(dataList)
-  f.close()
-  del f 
-
-  print(" - channels %s added" % (channelsAdded))
-  print(" - EDF file: '%s'" % (edfFilename))
-  return True
-
-def compareEdfs(edfFilename1, edfFilename2, verbose=True):
-  highlevel.compare_edf(edfFilename1, edfFilename2, verbose)
-
-def debugEdf(edfFilename):
-  signals, signalHeaders, header = highlevel.read_edf(edfFilename)
-
-  print(" -------------------------------------- ")
-  print(" DEBUG EDF: '%s'" % (edfFilename))
-  print("--------------------------------------- ")
-  print("")
-  print("HEADERS:")
-  print("--------")
-  print(header)
-  print("")
-  print("SIGNAL HEADERS:")
-  print("---------------")
-  print(signalHeaders)
-  print("")
-  print("SIGNALS:")
-  print("--------")
-  print("")
-  print(signals)
-  """
-  for s in signals:
-    l = len(s)
-    print(" - signal length: %d - signal: %s" % (l, str(s)))
-  """
-
-def plotEdfs(edfFilename1, edfFilename2):
-
-  signals1, signalHeaders1, header1 = highlevel.read_edf(edfFilename1)
-  signals2, signalHeaders2, header2 = highlevel.read_edf(edfFilename2)
-  
-  plt.plot(signals1[0], color="green")
-  plt.plot(signals2[0], "x", color="blue")
-  plt.show()
-
-  plt.plot(signals1[1], color="orange")
-  plt.plot(signals2[1], color="red")
-  plt.show()
-
 
