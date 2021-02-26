@@ -28,33 +28,47 @@ if [[ ! -e $ATC_FILE ]]; then echo "Error: ATC file ($EDF_FILE) does not exist. 
 EDF_FILE=$RECORD_FILE.edf
 if [[ ! -e $EDF_FILE ]]; then echo "Error: edf file ($EDF_FILE) does not exist."; exit 1; fi
 
+# annotation files (contain data stream annotation (eg. where is the QRS)
 ANN_GQRS_LEAD0=ann-gqrs-s0
 ANN_GQRS_LEAD1=ann-gqrs-s1
 ANN_ECGPU_LEAD0=ann-ecgpu-s0 
 ANN_ECGPU_LEAD1=ann-ecgpu-s1 
-
 # OUTPUTS (in data/work)
 ANN_GQRS_LEAD0_FILE=$RECORD_WORK_FILE.$ANN_GQRS_LEAD0
 ANN_GQRS_LEAD1_FILE=$RECORD_WORK_FILE.$ANN_GQRS_LEAD1
 ANN_ECGPU_LEAD0_FILE=$RECORD_WORK_FILE.$ANN_ECGPU_LEAD0
 ANN_ECGPU_LEAD1_FILE=$RECORD_WORK_FILE.$ANN_ECGPU_LEAD1
 
+# RR intervals files
 RR_GQRS_LEAD0_FILE=$RECORD_WORK_FILE.$ANN_GQRS_LEAD0.rr
 RR_GQRS_LEAD1_FILE=$RECORD_WORK_FILE.$ANN_GQRS_LEAD1.rr
 RR_ECGPU_LEAD0_FILE=$RECORD_WORK_FILE.$ANN_ECGPU_LEAD0.rr
 RR_ECGPU_LEAD1_FILE=$RECORD_WORK_FILE.$ANN_ECGPU_LEAD1.rr
 
+# Filtered RR intervals files
+RR_FILT_GQRS_LEAD0_FILE=$RECORD_WORK_FILE.$ANN_GQRS_LEAD0.frr 
+RR_FILT_GQRS_LEAD1_FILE=$RECORD_WORK_FILE.$ANN_GQRS_LEAD1.frr 
+RR_FILT_ECGPU_LEAD0_FILE=$RECORD_WORK_FILE.$ANN_ECGPU_LEAD0.frr 
+RR_FILT_ECGPU_LEAD1_FILE=$RECORD_WORK_FILE.$ANN_ECGPU_LEAD1.frr
+
+# RR intervals files for kubios
 RR_GQRS_LEAD0_KUBIOS_FILE=$RECORD_WORK_FILE.$ANN_GQRS_LEAD0.rr.kubios.txt
 RR_GQRS_LEAD1_KUBIOS_FILE=$RECORD_WORK_FILE.$ANN_GQRS_LEAD1.rr.kubios.txt
 RR_ECGPU_LEAD0_KUBIOS_FILE=$RECORD_WORK_FILE.$ANN_ECGPU_LEAD0.rr.kubios.txt
 RR_ECGPU_LEAD1_KUBIOS_FILE=$RECORD_WORK_FILE.$ANN_ECGPU_LEAD1.rr.kubios.txt
 
-SAMPLES_FILE=$RECORD_WORK_FILE.samples
+RR_FILT_GQRS_LEAD0_KUBIOS_FILE=$RECORD_WORK_FILE.$ANN_GQRS_LEAD0.frr.kubios.txt
+RR_FILT_GQRS_LEAD1_KUBIOS_FILE=$RECORD_WORK_FILE.$ANN_GQRS_LEAD1.frr.kubios.txt
+RR_FILT_ECGPU_LEAD0_KUBIOS_FILE=$RECORD_WORK_FILE.$ANN_ECGPU_LEAD0.frr.kubios.txt
+RR_FILT_ECGPU_LEAD1_KUBIOS_FILE=$RECORD_WORK_FILE.$ANN_ECGPU_LEAD1.frr.kubios.txt
+
+SAMPLES_FILE=$RECORD_WORK_FILE.samples.txt
 
 # OUTPUTS (in data/)
-WFDB_DESC_FILE=$RECORD_FILE.desc
+WFDB_DESC_FILE=$RECORD_WORK_FILE.desc
 
-OUTPUT_FILE=$RECORD_FILE.output-hrv.txt
+OUTPUT_FILE=$RECORD_WORK_FILE.output-hrv.txt
+OUTPUT_FILTERED_FILE=$RECORD_WORK_FILE.output-hrv.filtered.txt
 DATE=`date`
 
 
@@ -88,10 +102,19 @@ wfdbdesc $RECORD_WORK_ID > $WFDB_DESC_FILE
 if [[ $? -ne 0 ]]; then echo "Error: wfdbdesc failed"; exit 1; fi 
 
 echo ""
+echo " * rdsamp... (read samples to text)"
+echo " ---------------------------------------------------------"
+# -p: convert to sample unit (including time in sec)
+# -P          same as -p, but with greater precision
+# -v: print column headings
+# -s X: only for one signals (we want them all)
+# all samples in one files
+rdsamp -r $RECORD_WORK_ID -P -v > $SAMPLES_FILE
+if [[ $? -ne 0 ]]; then echo "Error: rdsamp lead 0"; exit 1; fi 
+
+echo ""
 echo " * gqrs..."
 echo " ---------------------------------------------------------"
-gqrs -r $RECORD_WORK_ID -o $ANN_GQRS_LEAD0 -s 0 
-if [[ $? -ne 0 ]]; then echo "Error: gqrs lead 0"; exit 1; fi 
 gqrs -r $RECORD_WORK_ID -o $ANN_GQRS_LEAD1 -s 1 
 if [[ $? -ne 0 ]]; then echo "Error: gqrs lead 1"; exit 1; fi 
 
@@ -99,126 +122,174 @@ if [[ $? -ne 0 ]]; then echo "Error: gqrs lead 1"; exit 1; fi
 echo ""
 echo " * ecgpu..."
 echo " ---------------------------------------------------------"
-ecgpuwave -r $RECORD_WORK_ID -a $ANN_ECGPU_LEAD0 -s 0
-if [[ $? -ne 0 ]]; then echo "Error: ecgpu lead 0"; exit 1; fi 
 ecgpuwave -r $RECORD_WORK_ID -a $ANN_ECGPU_LEAD1 -s 1
 if [[ $? -ne 0 ]]; then echo "Error: ecgpu lead 1"; exit 1; fi 
 rm fort.20 fort.21
 
+
+# format of the RR files:
+# 3 columns (T, RR, A)
+# 2 columns (RR, A)
+# 2 columns (T, RR)
+# 1 column (RR)
+#
+# where T is the time of occurrence of the beginning of the RR interval,
+# RR is the duration of the RR interval, 
+# and A is a beat label. 
+# Normal sinus beats are labeled N.
+#
+# ann2rr and rrlist do not display the exact same list !!
+#
+
 echo ""
-echo " * ann2rr... (annotation -QRS- to RR intervals)"
+echo " * ann2rr to list RR in ms"
 echo " ---------------------------------------------------------"
-# for Kubios
 #
 # -i FMT  print intervals using format FMT (see below for values of FMT)
 # -V FMT  print times of beginnings of intervals using format FMT (see below)
 # IMPORTANT: if '-p N'' => only NN intervals
 #
-ann2rr -r $RECORD_WORK_ID -a $ANN_GQRS_LEAD0 -i s -V s > $RR_GQRS_LEAD0_KUBIOS_FILE
-if [[ $? -ne 0 ]]; then echo "Error: ann2rr lead 0"; exit 1; fi 
-ann2rr -r $RECORD_WORK_ID -a $ANN_GQRS_LEAD1 -i s -V s > $RR_GQRS_LEAD1_KUBIOS_FILE
+ann2rr -r $RECORD_WORK_ID -a $ANN_GQRS_LEAD1 -V s -i s8 > $RR_GQRS_LEAD1_KUBIOS_FILE
 if [[ $? -ne 0 ]]; then echo "Error: ann2rr lead 1"; exit 1; fi 
-ann2rr -r $RECORD_WORK_ID -a $ANN_ECGPU_LEAD0 -i s -V s  > $RR_ECGPU_LEAD0_KUBIOS_FILE
-if [[ $? -ne 0 ]]; then echo "Error: ecgpu lead 0"; exit 1; fi 
-ann2rr -r $RECORD_WORK_ID -a $ANN_ECGPU_LEAD1 -i s -V s  > $RR_ECGPU_LEAD1_KUBIOS_FILE
+ann2rr -r $RECORD_WORK_ID -a $ANN_ECGPU_LEAD1 -V s -i s8 > $RR_ECGPU_LEAD1_KUBIOS_FILE
 if [[ $? -ne 0 ]]; then echo "Error: ecgpu lead 0"; exit 1; fi 
 
-# for record-viewer
-# By default, the output contains the RR intervals only
-ann2rr -r $RECORD_WORK_ID -a $ANN_GQRS_LEAD0 > $RR_GQRS_LEAD0_FILE
-if [[ $? -ne 0 ]]; then echo "Error: ann2rr lead 0"; exit 1; fi 
-ann2rr -r $RECORD_WORK_ID -a $ANN_GQRS_LEAD1 > $RR_GQRS_LEAD1_FILE
-if [[ $? -ne 0 ]]; then echo "Error: ann2rr lead 1"; exit 1; fi 
-ann2rr -r $RECORD_WORK_ID -a $ANN_ECGPU_LEAD0 > $RR_ECGPU_LEAD0_FILE
-if [[ $? -ne 0 ]]; then echo "Error: ecgpu lead 0"; exit 1; fi 
-ann2rr -r $RECORD_WORK_ID -a $ANN_ECGPU_LEAD1 > $RR_ECGPU_LEAD1_FILE
-if [[ $? -ne 0 ]]; then echo "Error: ecgpu lead 0"; exit 1; fi 
+### NOTE: Filtering may not be used
+###
+### echo ""
+### echo " * rrlist... (extract rr from GQRS and ECGPUS annotations)"
+### echo " ---------------------------------------------------------"
+### # for record-viewer (same rr tools as get_hrv is using)
+### # rrlist
+### # -s: use rrlist -s and format like:
+### #       28.433 1.327 N
+### # -t: time in sec (1st column)
+### # -M: output intervals in msec
+### #
+### # ann2rr
+### # By default, the output contains the RR intervals only
+### 
+### rrlist $ANN_GQRS_LEAD1 $RECORD_WORK_ID -s > $RR_GQRS_LEAD1_FILE
+### if [[ $? -ne 0 ]]; then echo "Error: ann2rr lead 1"; exit 1; fi 
+### rrlist $ANN_ECGPU_LEAD1 $RECORD_WORK_ID -s > $RR_ECGPU_LEAD1_FILE
+### if [[ $? -ne 0 ]]; then echo "Error: ecgpu lead 0"; exit 1; fi 
+### 
+### echo ""
+### echo " * filtnn... (filter RRs)"
+### echo " ---------------------------------------------------------"
+### 
+### # filtnn:
+### # -n : print ratio of nnout to nnin to rrin
+### # -p : print excluded data at start/end of hwin buffer
+### #
+### # filt: 0.2 (=20%) min dist(?) | 20 samples before and after point | -x amplitude min and max
+### #FILT="0.2 20 -x 0.4 2.0"
+### FILT="0.5 5 -x 0.4 2.0"
+### 
+### cat $RR_GQRS_LEAD1_FILE | filtnn $FILT -p -n | sort -k 1n > $RR_FILT_GQRS_LEAD1_FILE
+### if [[ $? -ne 0 ]]; then echo "Error: gqrs lead 1"; exit 1; fi 
+### cat $RR_ECGPU_LEAD1_FILE | filtnn $FILT -p -n | sort -k 1n > $RR_FILT_ECGPU_LEAD1_FILE
+### if [[ $? -ne 0 ]]; then echo "Error: ecgpu lead 1"; exit 1; fi 
+### 
+### 
+### 
+### echo ""
+### echo " * awk to convert RR to Kubios.txt..."
+### echo " ---------------------------------------------------------"
+### 
+### # non filtered
+### cat $RR_GQRS_LEAD1_FILE | awk '// { if( $3 == "N" ) { print $1"\t"$2 } }' > $RR_GQRS_LEAD1_KUBIOS_FILE
+### cat $RR_ECGPU_LEAD1_FILE | awk '// { if( $3 == "N" ) { print $1"\t"$2 } }' > $RR_ECGPU_LEAD1_KUBIOS_FILE
+### 
+### # filtered
+### cat $RR_FILT_GQRS_LEAD1_FILE | awk '// { if( $3 == "N" ) { print $1"\t"$2 } }' > $RR_FILT_GQRS_LEAD1_KUBIOS_FILE
+### cat $RR_FILT_ECGPU_LEAD1_FILE | awk '// { if( $3 == "N" ) { print $1"\t"$2 } }' > $RR_FILT_ECGPU_LEAD1_KUBIOS_FILE
+### 
+
 
 echo ""
-echo " * rdsamp... (read samples to text)"
-echo " ---------------------------------------------------------"
-# -p: convert to sample unit (including time in sec)
-# -P          same as -p, but with greater precision
-# all samples in one files
-rdsamp -r $RECORD_WORK_ID -P -v > $SAMPLES_FILE
-if [[ $? -ne 0 ]]; then echo "Error: rdsamp lead 0"; exit 1; fi 
-#rdsamp -r $RECORD_WORK_ID -p -s 1 > $SAMP_LEAD1_FILE
-#if [[ $? -ne 0 ]]; then echo "Error: rdsamp lead 0"; exit 1; fi 
-
-
-echo ""
-echo " * get_hrv short..."
+echo " * get_hrv non-filtered..."
 echo " ---------------------------------------------------------"
 
-GET_HRV_OPTS="-L" # print in one line (but no info)
+# -m: RR interval in msec
+# -R: RR interval file (2 columns: time (sec), interval, N or ...))
+# either -R or record name and annotation file -> BOTH GIVE IDENTICAL RESULTS
+# -M: output statistics in msec rather than sec
+# -f "filt hwin" : filter intervals
+# -L: output stats on 1 line
+# Here the "-F 0.2 20 -x 0.4 2.0" specifies the filtering parameters as follows. 
+# First, any intervals less than 0.4 sec or greater than 2.0 sec are excluded.
+# Next, using a window of 41 intervals (20 intervals on either side of the central point),
+# the average over the window is calculated excluding the central interval.
+# If the central interval lies outside 20% (0.2) of the window average this interval is flagged as an outlier and excluded. 
+# Then the window is advanced to the next interval. These parameters can be adjusted as appropriate for different data sets.
+#
+# get_hrv -m  -M -f "0.2 20 -x 0.4 2.0" -p "50" data/work/b6eyerafh1w451d64vjrgfkb2 ann-ecgpu-s1
+# or...
+# get_hrv ... -f ... -p ... -R rr_file # but get_hrv do it nicely itself
+
+#GET_HRV_OPTS="-L" # print in one line (but no info)
 
 echo $DATE > $OUTPUT_FILE
-echo "" >> $OUTPUT_FILE
-echo "---------------" >> $OUTPUT_FILE
-echo "GQRS - LEAD 0 :" >> $OUTPUT_FILE
-echo "---------------" >> $OUTPUT_FILE
-get_hrv $GET_HRV_OPTS -R $RR_GQRS_LEAD0_FILE >> $OUTPUT_FILE
-if [[ $? -ne 0 ]]; then echo "Error: get_hrv gqrs lead 0"; exit 1; fi 
 
 echo "" >> $OUTPUT_FILE
-echo "---------------" >> $OUTPUT_FILE
-echo "ECGPU - LEAD 0 :" >> $OUTPUT_FILE
-echo "---------------" >> $OUTPUT_FILE
-get_hrv $GET_HRV_OPTS -R $RR_ECGPU_LEAD0_FILE >> $OUTPUT_FILE
-if [[ $? -ne 0 ]]; then echo "Error: get_hrv ecgpu lead 0"; exit 1; fi 
-
-echo "" >> $OUTPUT_FILE
-echo "---------------" >> $OUTPUT_FILE
-echo "GQRS - LEAD 1 :" >> $OUTPUT_FILE
-echo "---------------" >> $OUTPUT_FILE
-get_hrv $GET_HRV_OPTS -R $RR_GQRS_LEAD1_FILE >> $OUTPUT_FILE
+echo "GQRS - LEAD II :" >> $OUTPUT_FILE
+get_hrv -L -m -M -p "50" $RECORD_WORK_ID $ANN_GQRS_LEAD1 >> $OUTPUT_FILE
 if [[ $? -ne 0 ]]; then echo "Error: get_hrv gqrs lead 1"; exit 1; fi 
 
 echo "" >> $OUTPUT_FILE
-echo "---------------" >> $OUTPUT_FILE
-echo "ECGPU - LEAD 1 :" >> $OUTPUT_FILE
-echo "---------------" >> $OUTPUT_FILE
-get_hrv $GET_HRV_OPTS -R $RR_ECGPU_LEAD1_FILE >> $OUTPUT_FILE
+echo "ECGPU - LEAD II :" >> $OUTPUT_FILE
+get_hrv -L -m -M -p "50" $RECORD_WORK_ID $ANN_ECGPU_LEAD1 >> $OUTPUT_FILE
 if [[ $? -ne 0 ]]; then echo "Error: get_hrv ecgpu lead 1"; exit 1; fi 
 
-
-# again but all lines
-echo ""
-echo " * get_hrv long..."
-echo " ---------------------------------------------------------"
+echo "" >> $OUTPUT_FILE
+echo "------------------------------------------------------" >> $OUTPUT_FILE
+echo "" >> $OUTPUT_FILE
 
 echo "" >> $OUTPUT_FILE
-echo "-------------------------------------------------------------------------------------" >> $OUTPUT_FILE
-
-GET_HRV_OPTS=""
-
-echo "" >> $OUTPUT_FILE
-echo "---------------" >> $OUTPUT_FILE
-echo "GQRS - LEAD 0 :" >> $OUTPUT_FILE
-echo "---------------" >> $OUTPUT_FILE
-get_hrv $GET_HRV_OPTS -R $RR_GQRS_LEAD0_FILE >> $OUTPUT_FILE
-if [[ $? -ne 0 ]]; then echo "Error: get_hrv gqrs lead 0"; exit 1; fi 
-
-echo "" >> $OUTPUT_FILE
-echo "---------------" >> $OUTPUT_FILE
-echo "ECGPU - LEAD 0 :" >> $OUTPUT_FILE
-echo "---------------" >> $OUTPUT_FILE
-get_hrv $GET_HRV_OPTS -R $RR_ECGPU_LEAD0_FILE >> $OUTPUT_FILE
-if [[ $? -ne 0 ]]; then echo "Error: get_hrv ecgpu lead 0"; exit 1; fi 
-
-echo "" >> $OUTPUT_FILE
-echo "---------------" >> $OUTPUT_FILE
-echo "GQRS - LEAD 1 :" >> $OUTPUT_FILE
-echo "---------------" >> $OUTPUT_FILE
-get_hrv $GET_HRV_OPTS -R $RR_GQRS_LEAD1_FILE >> $OUTPUT_FILE
+echo "GQRS - LEAD II :" >> $OUTPUT_FILE
+get_hrv -m -M -p "50" $RECORD_WORK_ID $ANN_GQRS_LEAD1 >> $OUTPUT_FILE
 if [[ $? -ne 0 ]]; then echo "Error: get_hrv gqrs lead 1"; exit 1; fi 
 
 echo "" >> $OUTPUT_FILE
-echo "---------------" >> $OUTPUT_FILE
-echo "ECGPU - LEAD 1 :" >> $OUTPUT_FILE
-echo "---------------" >> $OUTPUT_FILE
-get_hrv $GET_HRV_OPTS -R $RR_ECGPU_LEAD1_FILE >> $OUTPUT_FILE
+echo "ECGPU - LEAD II :" >> $OUTPUT_FILE
+get_hrv -m -M -p "50" $RECORD_WORK_ID $ANN_ECGPU_LEAD1 >> $OUTPUT_FILE
 if [[ $? -ne 0 ]]; then echo "Error: get_hrv ecgpu lead 1"; exit 1; fi 
+
+
+
+### echo ""
+### echo " * get_hrv filtered..."
+### echo " ---------------------------------------------------------"
+### 
+### echo $DATE > $OUTPUT_FILTERED_FILE
+### 
+### echo "" >> $OUTPUT_FILTERED_FILE
+### echo "GQRS - LEAD II :" >> $OUTPUT_FILTERED_FILE
+### get_hrv -L -m -M -f "$FILT" -p "50" $RECORD_WORK_ID $ANN_GQRS_LEAD1 >> $OUTPUT_FILTERED_FILE
+### if [[ $? -ne 0 ]]; then echo "Error: get_hrv gqrs lead 1"; exit 1; fi 
+### 
+### echo "" >> $OUTPUT_FILTERED_FILE
+### echo "ECGPU - LEAD II :" >> $OUTPUT_FILTERED_FILE
+### get_hrv -L -m -M -f "$FILT" -p "50" $RECORD_WORK_ID $ANN_ECGPU_LEAD1 >> $OUTPUT_FILTERED_FILE
+### if [[ $? -ne 0 ]]; then echo "Error: get_hrv ecgpu lead 1"; exit 1; fi 
+### 
+### echo "" >> $OUTPUT_FILTERED_FILE
+### echo "------------------------------------------------------" >> $OUTPUT_FILTERED_FILE
+### echo "" >> $OUTPUT_FILTERED_FILE
+### 
+### echo "" >> $OUTPUT_FILTERED_FILE
+### echo "GQRS - LEAD II :" >> $OUTPUT_FILTERED_FILE
+### get_hrv -m -M -f "$FILT" -p "50" $RECORD_WORK_ID $ANN_GQRS_LEAD1 >> $OUTPUT_FILTERED_FILE
+### if [[ $? -ne 0 ]]; then echo "Error: get_hrv gqrs lead 1"; exit 1; fi 
+### 
+### echo "" >> $OUTPUT_FILTERED_FILE
+### echo "ECGPU - LEAD II :" >> $OUTPUT_FILTERED_FILE
+### get_hrv -m -M -f "$FILT" -p "50" $RECORD_WORK_ID $ANN_ECGPU_LEAD1 >> $OUTPUT_FILTERED_FILE
+### if [[ $? -ne 0 ]]; then echo "Error: get_hrv ecgpu lead 1"; exit 1; fi 
+### 
+
+
 echo ""
 echo "done."
 exit 0
