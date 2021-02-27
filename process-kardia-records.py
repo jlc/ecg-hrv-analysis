@@ -7,6 +7,7 @@ import argparse
 import csv
 import datetime
 import re
+import copy
 
 import sqlite3
 
@@ -14,26 +15,30 @@ CURR_DIR = os.path.dirname(os.path.realpath(__file__))
 
 gDebug = False
 
-
 # Finder
 # --------------------------------------------------------------------------------------------
 class Finder:
-  def __init__(self, directory, extension, recursive=True):
-    self.extension = extension
+  def __init__(self, directory, extensionToFind, recursive=True):
+    self.extension = extensionToFind
     self.filesDirectory = directory
     self.recursive = recursive # if False => NOT IMPLEMENTED!
 
-  def getFilesWithoutExt(self):
-    fileList = []
+  # removeExt: contain extension to remove
+  def getFiles(self, removeExt=False): # return {filepath: filename, ...}
+    d = {}
 
     for root, dirs, files in os.walk(self.filesDirectory):
       for file in files:
         if file.endswith(self.extension.lower()):
-          fileNoExtension = '.'.join( file.split('.')[:-1] )
-          fileList.append( os.path.join(root, fileNoExtension) )
+          path = os.path.join(root, file)
+          if removeExt:
+            fileNoExt = '.'.join( file.split('.')[:-1] )
+            d[path] = fileNoExt
+          else:
+            path = os.path.join(root, file)
+            d[path] = file
 
-    return fileList
-
+    return d
 
 class ToolsBox:
   def __init__(self): pass 
@@ -51,7 +56,28 @@ class ToolsBox:
       # e.g. recordName blah/data/b6
       recordId = recordName.split('/')[-1:][0] # b6
       return recordId
-    
+
+  def filenameToRecordName(self, filename):
+    # ensure letters, digits and underscores only
+
+    def isValid(filename):
+      r = re.compile(r'^[\w\d_]*$')
+      m = r.match(filename) 
+      if m is None: return False
+      else: return True
+
+    if len(filename) > 40:
+      toomuch = len(filename) - 40
+      filename = 'S' + filename[toomuch:]
+
+    if isValid(filename): return filename
+
+    withoutMinus = filename.replace('-', '')
+    if isValid(withoutMinus): return withoutMinus
+
+    print("ERROR: filenameToRecordName: Unable to convert filename (%s)" % (filename))
+    return None
+
 toolsBox = ToolsBox()
 
 
@@ -100,8 +126,8 @@ class Record:
              'group',
              'prePost',
              'drOrPt',
-             'date',
              'durationMs',
+             'date',
              'dateWithOffset',
              'heartRate',
              'comment',
@@ -160,8 +186,8 @@ class CSVOutput:
   def write(self, records):
 
     if os.path.isfile(self.outputFilename):
-      print("ERROR: CSVOutput.write: output file (%s) already exists." % (self.outputFilename))
-      return False
+      print("Info: CSVOutput.write: output file (%s) already exists, recreating it." % (self.outputFilename))
+      os.remove(self.outputFilename)
 
     with open(self.outputFilename, mode='w') as file:
       writer = csv.writer(file, delimiter=';', quotechar='"', quoting=csv.QUOTE_MINIMAL)
@@ -185,7 +211,7 @@ class AliveECGDB:
     self.conn.close()
 
   def updateRecord(self, atcFilename, record): # return the updated record
-    SQL_LOAD_RECORD = "SELECT ZDURATION_MS, ZDATERECORDED, ZDATERECORDEDWITHOFFSET, ZHEARTRATE, ZCOMMENT, ZFILENAME from ZECG where ZFILENAME='%s'" % (atcFilename)
+    SQL_LOAD_RECORD = "SELECT ZDURATION_MS, ZDATERECORDED, ZDATERECORDEDWITHOFFSET, ZHEARTRATE, ZCOMMENT, ZFILENAME from ZECG where ZFILENAME='%s' or ZENHANCEDFILENAME='%s'" % (atcFilename, atcFilename)
     cursor = self.conn.execute(SQL_LOAD_RECORD)
 
     row = cursor.fetchone()
@@ -198,6 +224,7 @@ class AliveECGDB:
     record.dateWithOffset = int(row[2])
     record.heartRate = float(row[3])
     record.comment = row[4]
+    record.atcFilename = atcFilename
 
     return record
 
@@ -206,8 +233,8 @@ class AliveECGDB:
 class RecordsLoader:
   WorkingDirectory = 'work'
 
-  def __init__(self, recordNames, aliveEcgDb=None):
-    self.recordNames = recordNames
+  def __init__(self, recordNamesDict, aliveEcgDb=None):
+    self.recordNamesDict = recordNamesDict # {recordName: (atcFilename, atcFilepath), ..}
     self.aliveEcgDb = aliveEcgDb 
 
   def updateRecordFromAliveDb(self, atcFilename, rec): # return the update rec: Record()
@@ -254,10 +281,13 @@ class RecordsLoader:
   def loadRecords(self): # return [Record(), ...]
     records = []
 
-    for recordName in self.recordNames:
-      print("Info: Loading record: %s" % (recordName))
+    if self.aliveEcgDb is not None:
+        print("Info: loadRecords: also loading records from Alive SQLite Database")
 
-      atcFilename = toolsBox.getRecordId(recordName) + '.atc'
+    for recordName in self.recordNamesDict.keys():
+      print("Info: Loading record: %s" % (recordName))
+      (atcFilename, atcFilepath) = self.recordNamesDict[recordName] 
+      #print("Debug:   atcFilename: %s - atcFilepath: %s" % (atcFilename, atcFilepath))
 
       rec = Record()
 
@@ -269,29 +299,24 @@ class RecordsLoader:
           break
 
       # GQRS
-      gqrsGetHrvLead1Filename = toolsBox.getRecordWorkFilename(recordName, 'gqrs.gethrv.txt')
+      copyRec = copy.deepcopy(rec)
+      gqrsGetHrvLead1Filename = toolsBox.getRecordWorkFilename(recordName, 'output.gethrv-gqrs-lead1.txt')
       if not os.path.isfile(gqrsGetHrvLead1Filename):
         print("ERROR: get_hrv GQRS one line file not found (%s)" % (gqrsGetHrvLead1Filename))
       else:
-        r = self.updateRecordFromGetHrvFile('GQRS', 'physionet-get_hrv', gqrsGetHrvLead1Filename, rec)
-        records.append(r)
+        gqrs = self.updateRecordFromGetHrvFile('GQRS', 'physionet-get_hrv', gqrsGetHrvLead1Filename, copyRec)
+        records.append(gqrs)
 
       # ECGPU
-      ecgpuGetHrvLead1Filename = toolsBox.getRecordWorkFilename(recordName, 'ecgpu.gethrv.txt')
+      copyRec = copy.deepcopy(rec)
+      ecgpuGetHrvLead1Filename = toolsBox.getRecordWorkFilename(recordName, 'output.gethrv-ecgpu-lead1.txt')
       if not os.path.isfile(ecgpuGetHrvLead1Filename):
         print("ERROR: get_hrv ECPU one line file not found (%s)" % (ecgpuGetHrvLead1Filename))
       else:
-        r = self.getRecordFromGetHrvFile('ECGPU', 'physionet-get_hrv', ecgpuGetHrvLead1Filename, rec)
-        records.append(r)
+        ecgpu = self.updateRecordFromGetHrvFile('ECGPU', 'physionet-get_hrv', ecgpuGetHrvLead1Filename, copyRec)
+        records.append(ecgpu)
 
     return records
-
-
-
-# --------------------------------------------------------------------------------------------
-class SQLLightDatabase:
-  def __init__(self, filename):
-    self.dbFilename = filename
 
 
 # Processor()
@@ -308,6 +333,11 @@ class SQLLightDatabase:
 class Processor:
   def __init__(self):
     self.csvFilename = CURR_DIR + '/' + 'output.process-kardia.csv'
+    self.logFile = CURR_DIR + '/' + 'output.process-kardia.log'
+
+    if os.path.isfile(self.logFile):
+      print("Info: erasing previous log file (%s)" % (self.logFile)) 
+      os.remove(self.logFile)
 
   def loadAndWriteCSV(self, atcFilesDirectory, aliveDbFilename=None):
 
@@ -316,16 +346,62 @@ class Processor:
       aliveDb = AliveECGDB(aliveDbFilename)
 
     atcFinder = Finder(atcFilesDirectory, 'atc')
-    recordNames = atcFinder.getFilesWithoutExt()
+    atcFiles = atcFinder.getFiles(False)
+    atcFilesNoExt = atcFinder.getFiles(True)
+
+    """
+    print("DEBUG: atcFiles:")
+    for k in atcFiles.keys(): print(" %s: %s" % (k, atcFiles[k]))
+    print("DEBUG: atcFilesNoExt:")
+    for k in atcFilesNoExt.keys(): print(" %s: %s" % (k, atcFilesNoExt[k])) 
+    """
+
+    recordNamesDict = {} # {recordNames: (atcFilename, atcFilepath), ..}
+    for atcFilepath in atcFiles.keys():
+      atcFilename = atcFiles[atcFilepath] 
+      atcFiledir = '/'.join( atcFilepath.split('/')[:-1] )
+      atcFilenameNoExt = atcFilesNoExt[atcFilepath]
+
+      recordName = atcFiledir + '/' + toolsBox.filenameToRecordName(atcFilenameNoExt)
+      if recordName is None: return False
+
+      recordNamesDict[recordName] = (atcFilename, atcFilepath)
+
+
+    error = False
+    print("Info: Convert ATC -> EDF, and calculate HRVs...")
+    for rname in recordNamesDict.keys():
+      (atcfile, atcfilepath) = recordNamesDict[rname]
+
+      print("Info: processing ATC (%s) to record (%s)" % (atcfilepath, rname))
+      print("------ - %s - ---------------------------------" % (rname), file=open(self.logFile, 'a'))
+
+      cmd = "./atc2edf.py -i %s -r %s 1>>%s 2>&1" % (atcfilepath, rname, self.logFile)
+      #print("DEBUG: executing: ", cmd)
+      if os.system(cmd):
+        print("ERROR: Unable to convert atc (%s) (recordName: %s)" % (atcfilepath, rname))
+        error = True
+      else:
+        cmd = "./calculate.sh %s 1>>%s 2>&1" % (rname, self.logFile)
+        #print("DEBUG: executing: ", cmd)
+        if os.system(cmd):
+          print("ERROR: Unable to calculate recordName (%s)" % (rname))
+          error = True
+
+    if error:
+      print("ERROR: There were errors converting and/or calculating HRVs.")
+      return False 
+
 
     print("Debug: Loading hrv records...")
-    recordsLoader = RecordsLoader(recordNames, aliveDb)
+    recordsLoader = RecordsLoader(recordNamesDict, aliveDb)
     records = recordsLoader.loadRecords()
 
     print("Debug: Writing CSV output file '%s'" % (self.csvFilename))
     csvOutput = CSVOutput(self.csvFilename)
     csvOutput.write(records)
 
+    return True
 
 
 def main():
@@ -347,18 +423,22 @@ def main():
 
   aliveDbFilename = None
   if 'alive_ecg_filename' in args.keys():
-    aliveDbFilename = args['alive_ecg_filename']
-    if not os.path.isfile(aliveDbFilename):
-      print("ERROR: Alive ECG SQLite database '%s' does not exists." % (aliveDbFilename))
-      return 1
-    print("Info: using Alive ECG SQLite database '%s'" % (aliveDbFilename))
+    dbfilename = args['alive_ecg_filename']
+    if dbfilename is not None:
+      if os.path.isfile(dbfilename):
+        print("Info: using Alive ECG SQLite database '%s'" % (dbfilename))
+        aliveDbFilename = dbfilename
+      else:
+        print("ERROR: Alive ECG SQLite database '%s' does not exists." % (aliveDbFilename))
+        return 1
 
+  r = 0
   if doProcessATCFiles:
     print("Info: loading and processing atc files in '%s'" % (atcDirectory))
     p = Processor()
-    p.loadAndWriteCSV(atcDirectory, aliveDbFilename)
+    r = p.loadAndWriteCSV(atcDirectory, aliveDbFilename)
 
-  return 0
+  return r
 
 if __name__ == "__main__":
   ret = main()
