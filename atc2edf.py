@@ -168,6 +168,7 @@ def plotEdfs(edfFilename1, edfFilename2):
 def main():
 
   ap = argparse.ArgumentParser()
+  ap.add_argument("-i", "--atcFilename", required=True, help="atc filename to convert.")
   ap.add_argument("-r", "--recordName", required=True, help="record name") # type=int, default=42, action=
   ap.add_argument("-c", "--compareWithAlive", action='store_true', help="compare with AliveCore FileConverter's edf file (recordName.atc.edf)")
   ap.add_argument("-v", "--verbose", action='store_true', help="print verbose")
@@ -177,9 +178,13 @@ def main():
 
   print("Converting ATC -> EDF, recordName: ", args['recordName'])
 
-  atcFilename = CURR_DIR + "/" + args['recordName'] + ".atc"
+  atcFilename = CURR_DIR + "/" + args['atcFilename']
   edfFilename = CURR_DIR + "/" + args['recordName'] + ".edf"
   atcOrigFilename = CURR_DIR + "/" + args['recordName'] + ".atc.edf"
+
+  if not os.path.isfile(atcFilename):
+    print("ERROR: ATC file does not exist (%s)" % (atcFilename))
+    return 1
 
   print(" *** convert ATC file to dict... (using atc2json)")
   atcDict = convertAtc2Dict(atcFilename)
@@ -195,7 +200,7 @@ def main():
     plotEdfs(atcOrigFilename, edfFilename)
 
 
-  return 1
+  return 0
 
 
 if __name__ == "__main__":
