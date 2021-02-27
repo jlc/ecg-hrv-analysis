@@ -316,7 +316,7 @@ def main():
   if doPrintHrvFeatures:
     print(" *** HRV Features")
 
-    hrvAnalysis(times, samples['leadII'], timesEcgpuLead2, valuesEcgpuLead2)
+    hrvAnalysis(times, samples['leadI'], timesEcgpuLead2, valuesEcgpuLead2)
 
 
   """
