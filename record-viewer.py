@@ -4,7 +4,6 @@ import sys
 import os
 import subprocess
 import json
-import datetime
 import argparse
 import csv
 import datetime
