@@ -279,9 +279,9 @@ def main():
   #print("CURR_DIR: ", CURR_DIR)
   #print("recordName: ", args['recordName'])
 
-  samplesCsvFile = CURR_DIR + "/" + args['recordName'] + ".samples.txt"
-  rrKubiosGqrsLead2File = CURR_DIR + "/" + args['recordName'] + ".ann-gqrs-s1.rr.kubios.txt"
-  rrKubiosEcgpuLead2File = CURR_DIR + "/" + args['recordName'] + ".ann-ecgpu-s1.rr.kubios.txt"
+  samplesCsvFile = CURR_DIR + "/" + args['recordName'] + ".output.samples.txt"
+  rrKubiosGqrsLead2File = CURR_DIR + "/" + args['recordName'] + ".gqrs-lead1.rr.kubios.txt"
+  rrKubiosEcgpuLead2File = CURR_DIR + "/" + args['recordName'] + ".ecgpu-lead1.rr.kubios.txt"
 
   times, samples = readSamples(samplesCsvFile)
 
@@ -300,7 +300,7 @@ def main():
     print("INFO: LeadII: number of annotations in ECGPU: %d" % (len(timesEcgpuLead2)))
 
 
-    plotLeadWithRR("leadII", times, samples['leadII'],
+    plotLeadWithRR("leadI", times, samples['leadI'],
                       "GQRS", timesGqrsLead2, valuesGqrsLead2,
                       "ECGPU", timesEcgpuLead2, valuesEcgpuLead2)
     """
