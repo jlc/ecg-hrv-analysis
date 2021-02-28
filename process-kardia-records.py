@@ -11,6 +11,9 @@ import copy
 
 import sqlite3
 
+# https://github.com/Aura-healthcare/hrv-analysis
+from hrvanalysis import remove_outliers, remove_ectopic_beats, interpolate_nan_values, get_time_domain_features, get_frequency_domain_features, get_poincare_plot_features, plot_poincare
+
 CURR_DIR = os.path.dirname(os.path.realpath(__file__))
 
 gDebug = False
@@ -122,7 +125,144 @@ class ToolsBox:
 
 toolsBox = ToolsBox()
 
+# HRVAnalysis
+# --------------------------------------------------------------------------------------------
+class HRVAnalysis:
+  def __init__(self):
+    pass
+  
+  def readKubiosRR(self, rrKubiosCsvFile): # ([time1, time2, ...], [value1, value2, ...])
+    rrTimes = []
+    values = []
+    
+    with open(rrKubiosCsvFile, newline='') as rrfile:
+      reader = csv.reader(rrfile, delimiter="\t")
+      for row in reader:
+        t = float(row[0].strip())
+        v = float(row[1].strip())
+        rrTimes.append(t)
+        values.append(v)
 
+    return rrTimes, values
+
+  def readSamples(self, samplesCsvFile): # ( [sec1, sec2, ...], samples{'title': [values, ...], ...} )
+    samples = {}
+    idToTitles = {}
+
+    with open(samplesCsvFile, newline='') as csvfile:
+      reader = csv.reader(csvfile, delimiter="\t")
+      line = 0
+      for row in reader:
+        time = row[0]
+
+        # titles
+        if line == 0:
+          for r in range(len(row)):
+            title = row[r].strip()
+            samples[title] = []
+            idToTitles[r] = title
+
+        # units
+        elif line == 1:
+          next
+
+        # other lines are data
+        else:
+          for r in range(len(row)):
+            title = idToTitles[r]
+            samples[title].append(float(row[r].strip()))
+
+        line += 1
+
+    timeTitle = idToTitles[0]
+    times = samples[timeTitle]
+    del samples[timeTitle]
+
+    """
+    DEBUG:
+    timeTitle = idToTitles[0]
+    for title in samples:
+      print("title: %s" % (title))
+      for i in range(10):
+        print("time: %f: %f" % (samples[timeTitle][i], samples[title][i]))
+    """
+
+    return times, samples
+
+  def hrvAnalysis(self, times, samples, rrTimes, rrValues):
+
+    def listSecToMsec(secs):
+      msecs = []
+      for i in range(len(secs)):
+        msecs.append( int(secs[i] * 1000) )
+      return msecs
+
+    def listMsecToSec(msecs):
+      secs = []
+      for i in range(len(msecs)):
+        secs.append( float(msecs[i]) / 1000)
+      return secs
+
+    rrValuesMsec = listSecToMsec(rrValues)
+
+    results = {}
+    results['time_domain'] = get_time_domain_features(rrValuesMsec)
+    results['freq_domain'] = get_frequency_domain_features(rrValuesMsec)
+    results['poincare_plot'] = get_poincare_plot_features(rrValuesMsec)
+
+    return results
+
+  def calculateHrv(self, qrsAlgo, recordName):
+    samplesCsvFile = toolsBox.getRecordWorkFilename(recordName, "output.samples.txt")
+    rrKubiosLead1File = toolsBox.getRecordWorkFilename(recordName, "%s-lead1.rr.kubios.txt" % (qrsAlgo))
+
+    if not os.path.isfile(samplesCsvFile):
+      print("ERROR: record samples file does not exists (%s)." % (samplesCsvFile))
+      return None
+    if not os.path.isfile(rrKubiosLead1File):
+      print("ERROR: record rr-kubios-%s file does not exists (%s)." % (qrsAlgo, rrKubiosLead1File))
+      return None
+
+    times, samples = self.readSamples(samplesCsvFile)
+    timesLead1, valuesLead1 = self.readKubiosRR(rrKubiosLead1File)
+
+    return self.hrvAnalysis(times, samples['leadI'], timesLead1, valuesLead1)
+
+  def updateRecordFromHrvAnalysis(self, qrsAlgo, recordName, rec):
+
+    hrv = None
+    if qrsAlgo == 'gqrs':
+      hrv = self.calculateHrv('gqrs', recordName)
+    elif qrsAlgo == 'ecgpu':
+      hrv = self.calculateHrv('ecgpu', recordName)
+    else:
+      print("ERROR: updateRecordFromHrvAnalysis(): Unsupported QRS algo (%s)" % (qrsAlgo))
+      return None
+
+    if hrv is None:
+      return None
+
+    rec.hrvQrsAlgo = qrsAlgo.upper()
+    rec.hrvCalculator = 'HRV-ANALYSIS'
+
+    rec.hrv.avnn = float(format(hrv['time_domain']['mean_nni'], '.3f')) # or ['median_nni']
+    rec.hrv.sdnn = float(format(hrv['time_domain']['sdnn'], '.4f'))
+    rec.hrv.rmssd = float(format(hrv['time_domain']['rmssd'], '.4f'))
+    rec.hrv.pnn50 = float(format(hrv['time_domain']['pnni_50'], '.4f'))
+    rec.hrv.meanHeartRate = float(format(hrv['time_domain']['mean_hr'], '.1f'))
+
+    rec.hrv.totalPwr = float(format(hrv['freq_domain']['total_power'], '.2f'))
+    rec.hrv.lfPwr = float(format(hrv['freq_domain']['lf'], '.2f'))
+    rec.hrv.hfPwr = float(format(hrv['freq_domain']['hf'], '.2f'))
+    rec.hrv.vlfPwr = float(format(hrv['freq_domain']['vlf'], '.2f'))
+    rec.hrv.lfhfRatio = float(format(hrv['freq_domain']['lf_hf_ratio'], '.6f'))
+    # missing 'lfnu' and 'hfnu' ???
+
+    rec.hrv.sd1 = float(format(hrv['poincare_plot']['sd1'], '.4f'))
+    rec.hrv.sd2 = float(format(hrv['poincare_plot']['sd2'], '.4f'))
+    rec.hrv.sd2sd1Ratio = float(format(hrv['poincare_plot']['ratio_sd2_sd1'], '.4f'))
+
+    return rec
 
 # Kardia Record
 # --------------------------------------------------------------------------------------------
@@ -135,34 +275,50 @@ class Record:
                'SDNN (msec)', # (Standard deviation of all NN intervals)'
                'rMSSD (msec)', # (Square root of the mean of the squares of differences between adjacent NN intervals)
                'pNN50 (%)', # (Percentage of differences between adjacent NN intervals that are greater than 50 ms; a member of the larger pNNx family)
+               'TOTAL spectral power (msec2)', # (Total spectral power of all NN intervals up to 0.04 Hz) (???)
                'ULF spectral power (msec2)', # (Total spectral power of all NN intervals up to 0.003 Hz)
                'VLF spectral power (msec2)', # (Total spectral power of all NN intervals between 0.003 and 0.04 Hz)
                'LF spectral power (msec2)', # (Total spectral power of all NN intervals between 0.04 and 0.15 Hz.)
                'HF spectral power (msec2)', # (Total spectral power of all NN intervals between 0.15 and 0.4 Hz.)
-               'LF/HF (ratio)' # (Ratio of low to high frequency power)
+               'LF/HF (ratio)', # (Ratio of low to high frequency power)
+               'MEAN HR (bpm)', # 
+               'POINCARE sd1',
+               'POINCARE sd2',
+               'POINCARE sd2/sd1 (ratio)',
                ]
     def __init__(self):
-      self.nnRr = 0
-      self.avnn = 0
-      self.sdnn = 0
-      self.rmssd = 0
-      self.pnn50 = 0
-      self.ulfPwr = 0
-      self.vlfPwr = 0
-      self.lfPwr = 0
-      self.hfPwr = 0
-      self.lfhfRatio = 0
+      self.nnRr = 0.0
+      self.avnn = 0.0
+      self.sdnn = 0.0
+      self.rmssd = 0.0
+      self.pnn50 = 0.0
+      self.totalPwr = 0.0
+      self.ulfPwr = 0.0
+      self.vlfPwr = 0.0
+      self.lfPwr = 0.0
+      self.hfPwr = 0.0
+      self.lfhfRatio = 0.0
+      self.meanHeartRate = 0.0
+      self.sd1 = 0.0
+      self.sd2 = 0.0
+      self.sd2sd1Ratio = 0.0
     def asList(self):
       return [self.nnRr,
               self.avnn,
               self.sdnn,
               self.rmssd,
               self.pnn50,
+              self.totalPwr,
               self.ulfPwr,
               self.vlfPwr,
               self.lfPwr,
               self.hfPwr,
-              self.lfhfRatio]
+              self.lfhfRatio,
+              self.meanHeartRate,
+              self.sd1,
+              self.sd2,
+              self.sd2sd1Ratio
+              ]
 
   headers = ['RECORD_NAME',
              'PATIENT_ID',
@@ -230,7 +386,7 @@ class CSVOutput:
       os.remove(self.outputFilename)
 
     with open(self.outputFilename, mode='w') as file:
-      writer = csv.writer(file, delimiter=';', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+      writer = csv.writer(file, delimiter=';', quotechar='"', quoting=csv.QUOTE_ALL)
 
       # Headers
       writer.writerow( Record.headers )
@@ -277,6 +433,7 @@ class RecordsLoader:
     self.recordNamesDict = recordNamesDict # {recordName: (atcFilename, atcFilepath), ..}
     self.aliveEcgDb = aliveEcgDb 
     self.tryInterpretComments = tryInterpretComments
+    self.hrvAnalysis = HRVAnalysis()
 
   def updateRecordFromAliveDb(self, atcFilename, rec): # return the update rec: Record()
     if self.aliveEcgDb is None:
@@ -303,6 +460,7 @@ class RecordsLoader:
       rec.hrv.sdnn = m.group(4) # sdnn
       rec.hrv.rmssd = m.group(7) # rmssd
       rec.hrv.pnn50 = m.group(8) # pnn50
+      rec.hrv.totalPwr = m.group(9) # tot_pwr
       rec.hrv.ulfPwr = m.group(10) # ulf_pwr
       rec.hrv.vlfPwr = m.group(11) # vlf_pwr
       rec.hrv.lfPwr = m.group(12) # lf_pwr
@@ -338,7 +496,7 @@ class RecordsLoader:
           rec.drOrPt = results['drOrPt']
           rec.patientId = results['patientId']
 
-      # GQRS
+      # GET_HRV - GQRS
       print("Info:                 [from get_hrv with GQRS RR]")
       copyRec = copy.deepcopy(rec)
       gqrsGetHrvLead1Filename = toolsBox.getRecordWorkFilename(recordName, 'output.gethrv-gqrs-lead1.txt')
@@ -346,10 +504,10 @@ class RecordsLoader:
       if not os.path.isfile(gqrsGetHrvLead1Filename):
         print("ERROR: get_hrv GQRS one line file not found (%s)" % (gqrsGetHrvLead1Filename))
       else:
-        gqrs = self.updateRecordFromGetHrvFile('GQRS', 'physionet-get_hrv', gqrsGetHrvLead1Filename, copyRec)
+        gqrs = self.updateRecordFromGetHrvFile('GQRS', 'PHYSIONET-GET_HRV', gqrsGetHrvLead1Filename, copyRec)
         records.append(gqrs)
 
-      # ECGPU
+      # GET_HRV - ECGPU
       print("Info:                 [from get_hrv with ECGPU RR]")
       copyRec = copy.deepcopy(rec)
       ecgpuGetHrvLead1Filename = toolsBox.getRecordWorkFilename(recordName, 'output.gethrv-ecgpu-lead1.txt')
@@ -357,7 +515,25 @@ class RecordsLoader:
       if not os.path.isfile(ecgpuGetHrvLead1Filename):
         print("ERROR: get_hrv ECPU one line file not found (%s)" % (ecgpuGetHrvLead1Filename))
       else:
-        ecgpu = self.updateRecordFromGetHrvFile('ECGPU', 'physionet-get_hrv', ecgpuGetHrvLead1Filename, copyRec)
+        ecgpu = self.updateRecordFromGetHrvFile('ECGPU', 'PHYSIONET-GET_HRV', ecgpuGetHrvLead1Filename, copyRec)
+        records.append(ecgpu)
+
+      # HRVANALYSIS - GQRS
+      print("Info:                 [from hrvanalysis with GQRS RR]")
+      copyRec = copy.deepcopy(rec)
+      gqrs = self.hrvAnalysis.updateRecordFromHrvAnalysis('gqrs', recordName, copyRec)
+      if gqrs is None:
+        print("ERROR: hrvanalysis GQRS calculation failed.")
+      else:
+        records.append(gqrs)
+
+      # HRVANALYSIS - ECGPU
+      print("Info:                 [from hrvanalysis with ECGPU RR]")
+      copyRec = copy.deepcopy(rec)
+      ecgpu = self.hrvAnalysis.updateRecordFromHrvAnalysis('ecgpu', recordName, copyRec)
+      if ecgpu is None:
+        print("ERROR: hrvanalysis ECGPU calculation failed.")
+      else:
         records.append(ecgpu)
 
     return records
