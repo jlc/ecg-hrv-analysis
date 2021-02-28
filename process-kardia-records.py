@@ -78,6 +78,48 @@ class ToolsBox:
     print("ERROR: filenameToRecordName: Unable to convert filename (%s)" % (filename))
     return None
 
+  # Comments relative to BCC studentId and patientId notations
+  def tryInterpretCommentForBCC(self, comment):
+    #print("DEBUG: interpreting comment: '%s'" % (comment))
+
+    def findWord(word, comment):
+      m = re.compile(r".*\b%s\b.*" % (word), re.I).match(comment)
+      if m is None: return False
+      else: return True
+
+    results = {'prePost': '', 'drOrPt': '', 'patientId': ''}
+
+    # check pre/post
+    hasPre = findWord('pre', comment)
+    hasPost = findWord('post', comment)
+    if hasPre and hasPost:
+      print("WARNING: tryInterpretComment(): both 'pre' and 'post' are specified in comment (%s)" % (comment))
+    else:
+      if hasPre or hasPost:
+        if hasPre: results['prePost'] = 'PRE'
+        if hasPost: results['prePost'] = 'POST'
+
+    # check dr/pt
+    hasDr = findWord('dr', comment)
+    hasPt = findWord('pt', comment)
+    if hasPt and hasDr:
+      print("WARNING: tryInterpretComment(): both 'dr' and 'pt' are specified in comment (%s)" % (comment))
+    else:
+      if hasPt or hasDr:
+        if hasPt: results['drOrPt'] = 'PT'
+        if hasDr: results['drOrPt'] = 'DR'
+
+    # check patientId
+    hasStudentId = re.compile(r'.*\b([\d]{3,4}-[\d]{2,3})\b.*').match(comment)
+    if hasStudentId is not None:
+      results['patientId'] = hasStudentId.group(1)
+
+    hasCarpetaId = re.compile(r'.*\b([\d]{3,4})\b.*').match(comment)
+    if hasCarpetaId is not None:
+      results['patientId'] = hasCarpetaId.group(1)
+
+    return results
+
 toolsBox = ToolsBox()
 
 
@@ -230,9 +272,10 @@ class AliveECGDB:
 class RecordsLoader:
   WorkingDirectory = 'work'
 
-  def __init__(self, recordNamesDict, aliveEcgDb=None):
+  def __init__(self, recordNamesDict, aliveEcgDb=None, tryInterpretComments=False):
     self.recordNamesDict = recordNamesDict # {recordName: (atcFilename, atcFilepath), ..}
     self.aliveEcgDb = aliveEcgDb 
+    self.tryInterpretComments = tryInterpretComments
 
   def updateRecordFromAliveDb(self, atcFilename, rec): # return the update rec: Record()
     if self.aliveEcgDb is None:
@@ -252,21 +295,13 @@ class RecordsLoader:
         return None
 
       rec.recordName = m.group(1) # record_name
-      #rec.patientId
-      #rec.group
-      #rec.prePost
-      #rec.drOrPt
-      #rec.date
       rec.hrvQrsAlgo = qrsAlgo
       rec.hrvCalculator = hrvCalculator
       rec.hrv.nnRr = m.group(2) # nn_rr
       rec.hrv.avnn = m.group(3) # avnn
       rec.hrv.sdnn = m.group(4) # sdnn
-      #m.group(5) # sdann
-      #m.group(6) # sdnnidx
       rec.hrv.rmssd = m.group(7) # rmssd
       rec.hrv.pnn50 = m.group(8) # pnn50
-      # m.group(9) # tot_pwr
       rec.hrv.ulfPwr = m.group(10) # ulf_pwr
       rec.hrv.vlfPwr = m.group(11) # vlf_pwr
       rec.hrv.lfPwr = m.group(12) # lf_pwr
@@ -278,11 +313,8 @@ class RecordsLoader:
   def loadRecords(self): # return [Record(), ...]
     records = []
 
-    if self.aliveEcgDb is not None:
-        print("Info: loadRecords: also loading records from Alive SQLite Database")
-
     for recordName in self.recordNamesDict.keys():
-      print("Info: Loading record: %s" % (recordName))
+      print("Info: Loading record: '%s'" % (recordName))
       (atcFilename, atcFilepath) = self.recordNamesDict[recordName] 
       #print("Debug:   atcFilename: %s - atcFilepath: %s" % (atcFilename, atcFilepath))
 
@@ -290,14 +322,26 @@ class RecordsLoader:
 
       # From Alive Database
       if self.aliveEcgDb is not None:
+        print("Info:                 [from Alive Kardia database]")
+
         rec = self.updateRecordFromAliveDb(atcFilename, rec) 
         if rec is None:
           print("ERROR: Record '%s' does not exists in Alive ECG SQLitew database." % (atcFilename))
           break
 
+        # Try interpret comments
+        if self.tryInterpretComments:
+          print("Info:                 [interpret comment]")
+          results = toolsBox.tryInterpretCommentForBCC(rec.comment)
+          rec.prePost = results['prePost']
+          rec.drOrPt = results['drOrPt']
+          rec.patientId = results['patientId']
+
       # GQRS
+      print("Info:                 [from get_hrv with GQRS RR]")
       copyRec = copy.deepcopy(rec)
       gqrsGetHrvLead1Filename = toolsBox.getRecordWorkFilename(recordName, 'output.gethrv-gqrs-lead1.txt')
+
       if not os.path.isfile(gqrsGetHrvLead1Filename):
         print("ERROR: get_hrv GQRS one line file not found (%s)" % (gqrsGetHrvLead1Filename))
       else:
@@ -305,8 +349,10 @@ class RecordsLoader:
         records.append(gqrs)
 
       # ECGPU
+      print("Info:                 [from get_hrv with ECGPU RR]")
       copyRec = copy.deepcopy(rec)
       ecgpuGetHrvLead1Filename = toolsBox.getRecordWorkFilename(recordName, 'output.gethrv-ecgpu-lead1.txt')
+
       if not os.path.isfile(ecgpuGetHrvLead1Filename):
         print("ERROR: get_hrv ECPU one line file not found (%s)" % (ecgpuGetHrvLead1Filename))
       else:
@@ -336,7 +382,7 @@ class Processor:
       print("Info: erasing previous log file (%s)" % (self.logFile)) 
       os.remove(self.logFile)
 
-  def loadAndWriteCSV(self, atcFilesDirectory, aliveDbFilename=None):
+  def loadAndWriteCSV(self, atcFilesDirectory, aliveDbFilename=None, tryInterpretComments=False):
 
     aliveDb = None
     if aliveDbFilename is not None:
@@ -366,7 +412,7 @@ class Processor:
 
 
     error = False
-    print("Info: Convert ATC -> EDF, and calculate HRVs...")
+    print("Info: *** Converting ATC -> EDF + calculate HRVs...")
     for rname in recordNamesDict.keys():
       (atcfile, atcfilepath) = recordNamesDict[rname]
 
@@ -390,11 +436,11 @@ class Processor:
       return False 
 
 
-    print("Debug: Loading hrv records...")
-    recordsLoader = RecordsLoader(recordNamesDict, aliveDb)
+    print("Info: *** Loading records...")
+    recordsLoader = RecordsLoader(recordNamesDict, aliveDb, tryInterpretComments)
     records = recordsLoader.loadRecords()
 
-    print("Debug: Writing CSV output file '%s'" % (self.csvFilename))
+    print("Info: *** Writing CSV output file '%s'..." % (self.csvFilename))
     csvOutput = CSVOutput(self.csvFilename)
     csvOutput.write(records)
 
@@ -409,11 +455,13 @@ def main():
   ap.add_argument("-o", "--output-csv-filename", required=False, help="output CSV filename.")
   ap.add_argument("-a", "--alive-ecg-filename", required=False, help="Alive ECG Database filename.")
   ap.add_argument("-P", "--process-atc-files", action="store_true", required=False, help="process ATC files, load records (HRV and SQL) and write CSV output")
+  ap.add_argument("-i", "--try-interpret-comments", action="store_true", help="try interpreting comments from Kardia database.")
   #ap.add_argument("-hrv", "--print-hrv-features", action="store_true", help="Show HRV features (by hrv-analysis lib)")
   args = vars(ap.parse_args())
 
   gDebug = args['verbose']
   doProcessATCFiles = args['process_atc_files']
+  hasInterpretComments = args['try_interpret_comments']
 
   # add CURR_DIR + "/"
   atcDirectory = args['atcFilesDirectory']
@@ -423,7 +471,7 @@ def main():
     dbfilename = args['alive_ecg_filename']
     if dbfilename is not None:
       if os.path.isfile(dbfilename):
-        print("Info: using Alive ECG SQLite database '%s'" % (dbfilename))
+        print("Info: Using Alive ECG SQLite database '%s'" % (dbfilename))
         aliveDbFilename = dbfilename
       else:
         print("ERROR: Alive ECG SQLite database '%s' does not exists." % (aliveDbFilename))
@@ -433,7 +481,7 @@ def main():
   if doProcessATCFiles:
     print("Info: loading and processing atc files in '%s'" % (atcDirectory))
     p = Processor()
-    r = p.loadAndWriteCSV(atcDirectory, aliveDbFilename)
+    r = p.loadAndWriteCSV(atcDirectory, aliveDbFilename, hasInterpretComments)
 
   return r
 
