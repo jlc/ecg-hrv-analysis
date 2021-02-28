@@ -130,16 +130,17 @@ class Record:
   # HRV parameters
   # ------------------------------------------------------------------------------------------
   class HRV:
-    headers = ['nn_rr',
-               'avnn',
-               'sdnn',
-               'rmssd',
-               'pnn50',
-               'ulf_pwr',
-               'vlf_pwr',
-               'lf_pwr',
-               'hf_pwr',
-               'lfhf_ratio']
+    headers = ['NN/RR (percentage)', # if <= 0.8 = results somewhat unreliable - (NN/RR is the fraction of total RR intervals that are classified as normal-to-normal (NN) intervals and included in the calculation of HRV statistics. This ratio can be used as a measure of data reliability. For example, if the NN/RR ratio is less than 0.8, fewer than 80% of the RR intervals are classified as NN intervals, and the results will be somewhat unreliable.)
+               'AVNN (msec)', # (Average of all NN intervals)'
+               'SDNN (msec)', # (Standard deviation of all NN intervals)'
+               'rMSSD (msec)', # (Square root of the mean of the squares of differences between adjacent NN intervals)
+               'pNN50 (%)', # (Percentage of differences between adjacent NN intervals that are greater than 50 ms; a member of the larger pNNx family)
+               'ULF spectral power (msec2)', # (Total spectral power of all NN intervals up to 0.003 Hz)
+               'VLF spectral power (msec2)', # (Total spectral power of all NN intervals between 0.003 and 0.04 Hz)
+               'LF spectral power (msec2)', # (Total spectral power of all NN intervals between 0.04 and 0.15 Hz.)
+               'HF spectral power (msec2)', # (Total spectral power of all NN intervals between 0.15 and 0.4 Hz.)
+               'LF/HF (ratio)' # (Ratio of low to high frequency power)
+               ]
     def __init__(self):
       self.nnRr = 0
       self.avnn = 0
@@ -163,18 +164,18 @@ class Record:
               self.hfPwr,
               self.lfhfRatio]
 
-  headers = ['recordName',
-             'patientId',
-             'group',
-             'prePost',
-             'drOrPt',
-             'durationMs',
-             'datetime',
-             'heartRate',
-             'comment',
-             'atcFilename',
-             'hrvQrsAlgo',
-             'hrvCalculator'] + HRV.headers
+  headers = ['RECORD_NAME',
+             'PATIENT_ID',
+             'GROUP',
+             'PRE/POST',
+             'DR/PT',
+             'DURATION (msec)',
+             'DATE_TIME',
+             'HEART_RATE (bpm)',
+             'COMMENT',
+             'ATC_FILENAME',
+             'QRS_ALGORITHM',
+             'HRV_CALCULATOR'] + HRV.headers
   def __init__(self):
     self.recordName = ''
     self.patientId = ''
