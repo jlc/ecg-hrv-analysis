@@ -127,8 +127,7 @@ class Record:
              'prePost',
              'drOrPt',
              'durationMs',
-             'date',
-             'dateWithOffset',
+             'datetime',
              'heartRate',
              'comment',
              'atcFilename',
@@ -141,8 +140,7 @@ class Record:
     self.prePost = ''
     self.drOrPt = ''
     self.durationMs = 0
-    self.date = 0
-    self.dateWithOffset = 0
+    self.datetime = ''
     self.heartRate = 0
     self.comment = ''
     self.atcFilename = ''
@@ -156,8 +154,7 @@ class Record:
             self.prePost,
             self.drOrPt,
             self.durationMs,
-            self.date,
-            self.dateWithOffset,
+            self.datetime,
             self.heartRate,
             self.comment,
             self.atcFilename,
@@ -211,7 +208,8 @@ class AliveECGDB:
     self.conn.close()
 
   def updateRecord(self, atcFilename, record): # return the updated record
-    SQL_LOAD_RECORD = "SELECT ZDURATION_MS, ZDATERECORDED, ZDATERECORDEDWITHOFFSET, ZHEARTRATE, ZCOMMENT, ZFILENAME from ZECG where ZFILENAME='%s' or ZENHANCEDFILENAME='%s'" % (atcFilename, atcFilename)
+    # IMPORTANT NOTE: Kardia store ZDATERECORDED starting from 2001-01-01 --> we add this constant to get it from now (constant found in Kardia SQLite database too)
+    SQL_LOAD_RECORD = "select ZDURATION_MS, datetime(ZDATERECORDEDWITHOFFSET + 978307200, 'unixepoch') as Z_DATETIME,  ZHEARTRATE, ZCOMMENT, ZFILENAME from ZECG where ZFILENAME='%s' or ZENHANCEDFILENAME='%s'" % (atcFilename, atcFilename)
     cursor = self.conn.execute(SQL_LOAD_RECORD)
 
     row = cursor.fetchone()
@@ -220,10 +218,9 @@ class AliveECGDB:
       return None
 
     record.durationMs = int(row[0])
-    record.date = int(row[1])
-    record.dateWithOffset = int(row[2])
-    record.heartRate = float(row[3])
-    record.comment = row[4]
+    record.datetime = str(row[1])
+    record.heartRate = float(row[2])
+    record.comment = row[3]
     record.atcFilename = atcFilename
 
     return record
