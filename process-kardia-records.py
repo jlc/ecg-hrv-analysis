@@ -294,7 +294,7 @@ class RecordsLoader:
         print("Error: get_hrv GQRS one line does _not_ match the regular expression.")
         return None
 
-      rec.recordName = m.group(1) # record_name
+      rec.recordName = m.group(1).split('/')[-1:][0] # record_name
       rec.hrvQrsAlgo = qrsAlgo
       rec.hrvCalculator = hrvCalculator
       rec.hrv.nnRr = m.group(2) # nn_rr
