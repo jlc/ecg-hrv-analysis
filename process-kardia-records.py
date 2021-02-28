@@ -86,11 +86,18 @@ class ToolsBox:
     #print("DEBUG: interpreting comment: '%s'" % (comment))
 
     def findWord(word, comment):
-      m = re.compile(r".*\b%s\b.*" % (word), re.I).match(comment)
+
+      try: m = re.compile(r".*\b%s\b.*" % (word), re.I).match(comment)
+      except:
+        print("ERROR: Exception while compile() and match() comment: '%s'" % (comment))
+        return False
+
       if m is None: return False
       else: return True
 
     results = {'prePost': '', 'drOrPt': '', 'patientId': ''}
+
+    if comment is None: return results
 
     # check pre/post
     hasPre = findWord('pre', comment)
@@ -484,18 +491,19 @@ class RecordsLoader:
       if self.aliveEcgDb is not None:
         print("Info:                 [from Alive Kardia database]")
 
+        recBefore = rec
         rec = self.updateRecordFromAliveDb(atcFilename, rec) 
         if rec is None:
+          rec = recBefore
           print("ERROR: Record '%s' does not exists in Alive ECG SQLitew database." % (atcFilename))
-          break
-
-        # Try interpret comments
-        if self.tryInterpretComments:
-          print("Info:                 [interpret comment]")
-          results = toolsBox.tryInterpretCommentForBCC(rec.comment)
-          rec.prePost = results['prePost']
-          rec.drOrPt = results['drOrPt']
-          rec.patientId = results['patientId']
+        else:
+          # Try interpret comments
+          if self.tryInterpretComments:
+            print("Info:                 [interpret comment]")
+            results = toolsBox.tryInterpretCommentForBCC(rec.comment)
+            rec.prePost = results['prePost']
+            rec.drOrPt = results['drOrPt']
+            rec.patientId = results['patientId']
 
       # GET_HRV - GQRS
       print("Info:                 [from get_hrv with GQRS RR]")

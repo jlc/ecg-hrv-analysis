@@ -170,7 +170,8 @@ def main():
   ap = argparse.ArgumentParser()
   ap.add_argument("-i", "--atcFilename", required=True, help="atc filename to convert.")
   ap.add_argument("-r", "--recordName", required=True, help="record name") # type=int, default=42, action=
-  ap.add_argument("-c", "--compareWithAlive", action='store_true', help="compare with AliveCore FileConverter's edf file (recordName.atc.edf)")
+  #ap.add_argument("-c", "--compareWithAlive", action='store_true', help="compare with AliveCore FileConverter's edf file (recordName.atc.edf)")
+  ap.add_argument("-f", "--forceOverwriteEDF", action='store_true', help='force overwriting EDF file if already exists.')
   ap.add_argument("-v", "--verbose", action='store_true', help="print verbose")
   args = vars(ap.parse_args())
 
@@ -186,19 +187,27 @@ def main():
     print("ERROR: ATC file does not exist (%s)" % (atcFilename))
     return 1
 
+  if os.path.isfile(edfFilename):
+    if args['forceOverwriteEDF']:
+      print("INFO: EDF file (%s) already exists, overwriting." % (edfFilename))
+    else:
+      print("INFO: EDF file (%s) already exists, do nothing." % (edfFilename))
+      return 0
+
   print(" *** convert ATC file to dict... (using atc2json)")
   atcDict = convertAtc2Dict(atcFilename)
 
   print(" *** convert dict to EDF...")
   convertAtcDict2Edf(edfFilename, atcDict) 
 
+  """
   if args['compareWithAlive']:
     print(" *** debug atc.edf and .edf")
     debugEdf(edfFilename)
     debugEdf(atcOrigFilename)
 
     plotEdfs(atcOrigFilename, edfFilename)
-
+  """
 
   return 0
 

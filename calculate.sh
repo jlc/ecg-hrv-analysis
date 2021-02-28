@@ -71,6 +71,11 @@ OUTPUT_FILE=$RECORD_WORK_FILE.output.gethrv.txt
 #OUTPUT_FILTERED_FILE=$RECORD_WORK_FILE.output-hrv.filtered.txt
 DATE=`date`
 
+if [[ -e $RECORD_FILE_HEA &&
+      -e $RECORD_FILE_DAT ]]; then
+    echo "INFO: Record '$RECORD_ID' already calculated, do nothing."
+    exit 0 
+    fi
 
 #echo ""
 #echo " ---------------------------------------------------------"
