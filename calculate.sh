@@ -260,16 +260,16 @@ echo " ---------------------------------------------------------"
 #
 # Output one line 
 #
-get_hrv -L -m -M -p "50" $RECORD_WORK_ID $ANN_GQRS_LEAD1 >> $GETHRV_GQRS_LEAD1_FILE
+get_hrv -L -m -M -p "50" $RECORD_WORK_ID $ANN_GQRS_LEAD1 > $GETHRV_GQRS_LEAD1_FILE
 if [[ $? -ne 0 ]]; then echo "Error: get_hrv gqrs leadI"; exit 1; fi 
 if [[ $HAS_LEAD2 -eq 1 ]]; then
-    get_hrv -L -m -M -p "50" $RECORD_WORK_ID $ANN_GQRS_LEAD2 >> $GETHRV_GQRS_LEAD2_FILE
+    get_hrv -L -m -M -p "50" $RECORD_WORK_ID $ANN_GQRS_LEAD2 > $GETHRV_GQRS_LEAD2_FILE
     if [[ $? -ne 0 ]]; then echo "Error: get_hrv gqrs leadII"; exit 1; fi 
     fi
-get_hrv -L -m -M -p "50" $RECORD_WORK_ID $ANN_ECGPU_LEAD1 >> $GETHRV_ECGPU_LEAD1_FILE
+get_hrv -L -m -M -p "50" $RECORD_WORK_ID $ANN_ECGPU_LEAD1 > $GETHRV_ECGPU_LEAD1_FILE
 if [[ $? -ne 0 ]]; then echo "Error: get_hrv ecgpu leadI"; exit 1; fi 
 if [[ $HAS_LEAD2 -eq 1 ]]; then
-    get_hrv -L -m -M -p "50" $RECORD_WORK_ID $ANN_ECGPU_LEAD2 >> $GETHRV_ECGPU_LEAD2_FILE
+    get_hrv -L -m -M -p "50" $RECORD_WORK_ID $ANN_ECGPU_LEAD2 > $GETHRV_ECGPU_LEAD2_FILE
     if [[ $? -ne 0 ]]; then echo "Error: get_hrv ecgpu leadII"; exit 1; fi 
     fi
 
