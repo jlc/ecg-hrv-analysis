@@ -180,7 +180,7 @@ def main():
 
   atcFilename = CURR_DIR + "/" + args['atcFilename']
   edfFilename = CURR_DIR + "/" + args['recordName'] + ".edf"
-  atcOrigFilename = CURR_DIR + "/" + args['recordName'] + ".atc.edf"
+  atcOrigFilename = CURR_DIR + "/" + args['recordName'] + ".atc.edf" # created by GUI ATC 2 EDF tool
 
   if not os.path.isfile(atcFilename):
     print("ERROR: ATC file does not exist (%s)" % (atcFilename))
