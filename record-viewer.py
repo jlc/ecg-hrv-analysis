@@ -122,12 +122,40 @@ def plotRR(times, sample, rrTimes, rrValues, title, lead, rrLabel):
   yMax = max(sample)
 
   plt.plot(times, sample, label=lead)
-  plt.plot(rrTimes, rrValues, 'x', label=rrLabel, color="orange")
+  #plt.plot(rrTimes, rrValues, 'x', label=rrLabel, color="orange")
   plt.vlines(x=rrTimes, ymin=yMin, ymax=yMax, color="orange")
   plt.xlabel('time')
   plt.ylabel('mV')
   plt.title(title)
   plt.legend()
+  plt.show()
+
+def plotCompareRecordsWithRR(r1Title, r1Times, r1Samples, r1rrTimes, r1rrValues, r2Title, r2Times, r2Samples, r2rrTimes, r2rrValues):
+
+  fig, ax = plt.subplots(2)
+  
+  r1yMin = min(r1Samples)
+  r1yMax = max(r1Samples)
+ 
+  ax[0].plot(r1Times, r1Samples, label=r1Title)
+  #ax[0].plot(r1rrTimes, r1rrValues, 'x', label="GQRS", color="orange")
+  ax[0].vlines(x=r1rrTimes, ymin=r1yMin, ymax=r1yMax, label="GQRS", color="orange")
+  ax[0].set_xlabel('time')
+  ax[0].set_ylabel('mV')
+  ax[0].set_title("LeadI (GQRS)" + " (" + r1Title + ")")
+  ax[0].legend()
+
+  r2yMin = min(r2Samples)
+  r2yMax = max(r2Samples)
+
+  ax[1].plot(r2Times, r2Samples, label=r2Title)
+  #ax[1].plot(r2rrTimes, r2rrValues, 'x', label="GQRS", color="orange")
+  ax[1].vlines(x=r2rrTimes, ymin=r2yMin, ymax=r2yMax, label="GQRS", color="orange")
+  ax[1].set_xlabel('time')
+  ax[1].set_ylabel('mV')
+  ax[1].set_title("LeadI (GQRS)" + " (" + r2Title + ")")
+  ax[1].legend()
+
   plt.show()
 
 def plotLeadWithRR(leadTitle, times, samples, rr1Title, rr1Times, rr1Values, rr2Title, rr2Times, rr2Values):
@@ -264,36 +292,64 @@ def hrvAnalysis(times, samples, rrTimes, rrValues):
 def main():
 
   ap = argparse.ArgumentParser()
-  ap.add_argument("-r", "--recordName", required=True, help="record name") # type=int, default=42, action=
+  ap.add_argument("-r1", "--record1Name", required=True, help="record 1 name") # type=int, default=42, action=
+  ap.add_argument("-r2", "--record2Name", required=True, help="record 2 name") # type=int, default=42, action=
   ap.add_argument("-v", "--verbose", action='store_true', help="print verbose")
   ap.add_argument("-6", "--plot-6-signals", action='store_true', help="Plot 6 signals one below the other")
-  ap.add_argument("-2rr", "--plot-leadII-with-rr-gqrs-ecgpu", action="store_true", help="Plot leadII with both GQRS and ECGPU")
+  ap.add_argument("-gqrs", "--plot-leadI-with-rr-gqrs", action="store_true", help="Plot Record 1 leadI and RR calculated by GQRS")
+  ap.add_argument("-cmpqrs", "--plot-compare-record12-with-rr-gqrs", action="store_true", help="Plot to compare record 1 and record 2 with RR calculated by GQRS")
+  #ap.add_argument("-2rr", "--plot-leadII-with-rr-gqrs-ecgpu", action="store_true", help="Plot leadII with both GQRS and ECGPU")
   ap.add_argument("-hrv", "--print-hrv-features", action="store_true", help="Show HRV features (by hrv-analysis lib)")
   args = vars(ap.parse_args())
 
   gDebug = args['verbose']
   doPlot6Signals = args['plot_6_signals']
-  doPlotLeadIIWithRRs = args['plot_leadII_with_rr_gqrs_ecgpu']
+  doPlotLeadIWithRRGQRS = args['plot_leadI_with_rr_gqrs']
+  #doPlotLeadIIWithRRs = args['plot_leadII_with_rr_gqrs_ecgpu']
   doPrintHrvFeatures = args['print_hrv_features']
 
   #print("CURR_DIR: ", CURR_DIR)
   #print("recordName: ", args['recordName'])
 
-  samplesCsvFile = CURR_DIR + "/" + args['recordName'] + ".output.samples.txt"
-  rrKubiosGqrsLead2File = CURR_DIR + "/" + args['recordName'] + ".gqrs-lead1.rr.kubios.txt"
-  rrKubiosEcgpuLead2File = CURR_DIR + "/" + args['recordName'] + ".ecgpu-lead1.rr.kubios.txt"
-
-  times, samples = readSamples(samplesCsvFile)
-
-  timesGqrsLead2, valuesGqrsLead2 = readKubiosRR(rrKubiosGqrsLead2File)
-  timesEcgpuLead2, valuesEcgpuLead2 = readKubiosRR(rrKubiosEcgpuLead2File)
-
-  if doPlot6Signals:
+  if args['plot_6_signals']:
     print(" *** Plotting 6 signals")
+    samplesCsvFile = CURR_DIR + "/" + args['record1Name'] + ".output.samples.txt"
+
+    times, samples = readSamples(samplesCsvFile)
+
     plotAllSignals(times, samples)
 
+  if args['plot_leadI_with_rr_gqrs']:
+    print(" *** Plotting LeadI wtih RR calculated by GQRS.")
 
-  if doPlotLeadIIWithRRs:
+    samplesCsvFile = CURR_DIR + "/" + args['record1Name'] + ".output.samples.txt"
+    rrKubiosGqrsLead1File = CURR_DIR + "/" + args['record1Name'] + ".gqrs-lead1.rr.kubios.txt"
+
+    times, samples = readSamples(samplesCsvFile)
+    timesGqrsLead1, valuesGqrsLead1 = readKubiosRR(rrKubiosGqrsLead1File)
+    
+    plotRR(times, samples['leadI'], timesGqrsLead1, valuesGqrsLead1, "LeadI - GQRS", "leadI", "gqrs")
+
+  if args['plot_compare_record12_with_rr_gqrs']:
+    print(" *** Plotting to compare LeadI from records 1 and 2 with RR calculated by GQRS.")
+
+    r1SamplesCsvFile = CURR_DIR + "/" + args['record1Name'] + ".output.samples.txt"
+    r2SamplesCsvFile = CURR_DIR + "/" + args['record2Name'] + ".output.samples.txt"
+    r1rrKubiosGqrsLead1File = CURR_DIR + "/" + args['record1Name'] + ".gqrs-lead1.rr.kubios.txt"
+    r2rrKubiosGqrsLead1File = CURR_DIR + "/" + args['record2Name'] + ".gqrs-lead1.rr.kubios.txt"
+
+    r1Times, r1Samples = readSamples(r1SamplesCsvFile)
+    r2Times, r2Samples = readSamples(r2SamplesCsvFile)
+
+    r1rrTimes, r1rrValues = readKubiosRR(r1rrKubiosGqrsLead1File)
+    r2rrTimes, r2rrValues = readKubiosRR(r2rrKubiosGqrsLead1File)
+
+    plotCompareRecordsWithRR(args['record1Name'], r1Times, r1Samples['leadI'], r1rrTimes, r1rrValues,
+                             args['record2Name'], r2Times, r2Samples['leadI'], r2rrTimes, r2rrValues)
+
+
+  """"
+  if args['plot_leadII_with_rr_gqrs_ecgpu']:
     print(" *** Plotting LeadII with GQRS and ECGPU")
 
     print("INFO: LeadII: number of annotations in GQRS: %d" % (len(timesGqrsLead2)))
@@ -301,9 +357,9 @@ def main():
 
 
     plotLeadWithRR("leadI", times, samples['leadI'],
-                      "GQRS", timesGqrsLead2, valuesGqrsLead2,
-                      "ECGPU", timesEcgpuLead2, valuesEcgpuLead2)
-    """
+                      "GQRS", timesGqrsLead1, valuesGqrsLead1,
+                      "ECGPU", timesEcgpuLead1, valuesEcgpuLead1)
+
     plotLeadWithRR("leadII", times, samples['leadII'],
                       "GQRS", timesGqrsLead2, valuesGqrsLead2,
                       "Filtered GQRS", filtTimesGqrsLead2, filtValuesGqrsLead2)
@@ -311,7 +367,7 @@ def main():
     plotLeadWithRR("leadII", times, samples['leadII'],
                       "ECGPU", timesEcgpuLead2, valuesEcgpuLead2,
                       "Filtered ECGPU", filtTimesEcgpuLead2, filtValuesEcgpuLead2)
-    """
+  """
 
   if doPrintHrvFeatures:
     print(" *** HRV Features")
