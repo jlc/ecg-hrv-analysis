@@ -3,6 +3,7 @@
 import sys
 import os
 import subprocess
+import signal
 import argparse
 import csv
 import datetime
@@ -623,18 +624,24 @@ class Processor:
       print("Info: processing ATC (%s) to record (%s)" % (atcfilepath, rname))
       print("------ - %s - ---------------------------------" % (rname), file=open(self.logFile, 'a'))
 
-      cmd = "./atc2edf.py -i %s -r %s 1>>%s 2>&1" % (atcfilepath, rname, self.logFile)
-      #print("DEBUG: executing: ", cmd)
-      if os.system(cmd):
-        print("ERROR: Unable to convert atc (%s) (recordName: %s)" % (atcfilepath, rname))
-        error = True
-      else:
-        cmd = "./calculate.sh %s 1>>%s 2>&1" % (rname, self.logFile)
-        #print("DEBUG: executing: ", cmd)
-        if os.system(cmd):
-          print("ERROR: Unable to calculate recordName (%s)" % (rname))
+      cmd = "./atc2edf.py -i %s -r %s" % (atcfilepath, rname)
+      #cmd = "./atc2edf.py -i %s -r %s 1>>%s 2>&1" % (atcfilepath, rname, self.logFile)
+      with open(self.logFile, "a+") as logFile:
+        process = subprocess.Popen(cmd, stdout=logFile, stderr=logFile, shell=True)
+        ret = process.wait()
+        if ret != 0:
+          print("ERROR: Unable to convert atc (%s) (recordName: %s)" % (atcfilepath, rname))
           error = True
+        else:
 
+          cmd = "./calculate.sh %s" % (rname)
+          #cmd = "./calculate.sh %s 1>>%s 2>&1" % (rname, self.logFile)
+          process = subprocess.Popen(cmd, stdout=logFile, stderr=logFile, shell=True)
+          ret = process.wait()
+          if ret != 0:
+            print("ERROR: Unable to calculate recordName (%s)" % (rname))
+            error = True
+        
     if error:
       print("ERROR: There were errors converting and/or calculating HRVs.")
       return False 
@@ -650,8 +657,13 @@ class Processor:
 
     return True
 
+def handlerSIGINT(signalReceived, frame):
+  print("WARNING: SIGINT received (eg. CTRL+C), stopping.")
+  exit(1)
 
 def main():
+
+  signal.signal(signal.SIGINT, handlerSIGINT)
 
   ap = argparse.ArgumentParser()
   ap.add_argument("-d", "--atcFilesDirectory", required=True, help="Source directory with .ATC files in.")
@@ -686,7 +698,7 @@ def main():
     dbfilename = args['alive_ecg_filename']
     if dbfilename is not None:
       if os.path.isfile(dbfilename):
-        print("Info: Using Alive ECG SQLite database '%s'" % (dbfilename))
+        print("Info: using Alive ECG SQLite database '%s'" % (dbfilename))
         aliveDbFilename = dbfilename
       else:
         print("ERROR: Alive ECG SQLite database '%s' does not exists." % (aliveDbFilename))
