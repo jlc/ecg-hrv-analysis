@@ -289,15 +289,60 @@ def hrvAnalysis(times, samples, rrTimes, rrValues):
 
   return True 
 
+def plotCompareWithInterpolatedValues(times, samples, rrTimes, rrValues):
+
+  def listSecToMsec(secs):
+    msecs = []
+    for i in range(len(secs)):
+      msecs.append( int(secs[i] * 1000) )
+    return msecs
+
+  def listMsecToSec(msecs):
+    secs = []
+    for i in range(len(msecs)):
+      secs.append( float(msecs[i]) / 1000)
+    return secs
+
+  rrValuesMsec = listSecToMsec(rrValues)
+
+  # Remove outliers + interpolate + remove ectopic + interpolate 
+
+  # This remove outliers from signal
+  """
+  rr_intervals_without_outliers = remove_outliers(rr_intervals=rrValuesMsec,
+                                                  low_rri=300, high_rri=2000)
+
+  # This replace outliers nan values with linear interpolation
+  interpolated_rr_intervals = interpolate_nan_values(rr_intervals=rr_intervals_without_outliers,
+                                                     interpolation_method="linear")
+
+
+  # This remove ectopic beats from signal
+  nn_intervals_list = remove_ectopic_beats(rr_intervals=interpolated_rr_intervals, method="malik")
+  """
+
+  # This replace ectopic beats nan values with linear interpolation
+  interpolated_nn_intervals = interpolate_nan_values(rr_intervals=rrValuesMsec)
+
+  #interpolated_nn_intervals_sec = listMsecToSec(interpolated_nn_intervals)
+
+  print("rrValuesMsec ==> " + str(rrValuesMsec[:1000]))
+  print("interpolated_nn_intervals ==> " + str(interpolated_nn_intervals[:1000]))
+
+  plotCompareRecordsWithRR("Non-interpolated", times, samples, rrTimes, rrValues,
+                           "Interpolated", times, samples, interpolated_nn_intervals, rrValues)
+
+
 def main():
 
   ap = argparse.ArgumentParser()
   ap.add_argument("-r1", "--record1Name", required=True, help="record 1 name") # type=int, default=42, action=
-  ap.add_argument("-r2", "--record2Name", required=True, help="record 2 name") # type=int, default=42, action=
+  ap.add_argument("-r2", "--record2Name", required=False, help="record 2 name") # type=int, default=42, action=
   ap.add_argument("-v", "--verbose", action='store_true', help="print verbose")
   ap.add_argument("-6", "--plot-6-signals", action='store_true', help="Plot 6 signals one below the other")
   ap.add_argument("-gqrs", "--plot-leadI-with-rr-gqrs", action="store_true", help="Plot Record 1 leadI and RR calculated by GQRS")
   ap.add_argument("-cmpqrs", "--plot-compare-record12-with-rr-gqrs", action="store_true", help="Plot to compare record 1 and record 2 with RR calculated by GQRS")
+  ap.add_argument("-cmpinterpolated", "--plot-compare-leadI-with-rr-gqrs-interpolated", action="store_true", help="Plot to compare record1 with QRS interpolated or not.")
   #ap.add_argument("-2rr", "--plot-leadII-with-rr-gqrs-ecgpu", action="store_true", help="Plot leadII with both GQRS and ECGPU")
   ap.add_argument("-hrv", "--print-hrv-features", action="store_true", help="Show HRV features (by hrv-analysis lib)")
   args = vars(ap.parse_args())
@@ -346,6 +391,17 @@ def main():
 
     plotCompareRecordsWithRR(args['record1Name'], r1Times, r1Samples['leadI'], r1rrTimes, r1rrValues,
                              args['record2Name'], r2Times, r2Samples['leadI'], r2rrTimes, r2rrValues)
+
+  if args['plot_compare_leadI_with_rr_gqrs_interpolated']:
+    print(" *** Plot to compare leadI from record1 with RR interpolated or not.")
+
+    samplesCsvFile = CURR_DIR + "/" + args['record1Name'] + ".output.samples.txt"
+    rrKubiosGqrsLead1File = CURR_DIR + "/" + args['record1Name'] + ".gqrs-lead1.rr.kubios.txt"
+
+    times, samples = readSamples(samplesCsvFile)
+    rrTimes, rrValues = readKubiosRR(rrKubiosGqrsLead1File)
+    
+    plotCompareWithInterpolatedValues(times, samples['leadI'], rrTimes, rrValues)
 
 
   """"
