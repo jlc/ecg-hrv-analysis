@@ -304,10 +304,10 @@ class Record:
                'LF spectral power (msec2)', # (Total spectral power of all NN intervals between 0.04 and 0.15 Hz.)
                'HF spectral power (msec2)', # (Total spectral power of all NN intervals between 0.15 and 0.4 Hz.)
                'LF/HF (ratio)', # (Ratio of low to high frequency power)
-               'MEAN HR (bpm)', # 
-               'POINCARE sd1',
-               'POINCARE sd2',
-               'POINCARE sd2/sd1 (ratio)',
+               'MEAN HR (bpm) [HRVANALYSIS]', # 
+               'POINCARE sd1 [HRVANALYSIS]',
+               'POINCARE sd2 [HRVANALYSIS]',
+               'POINCARE sd2/sd1 (ratio) [HRVANALYSIS]',
                ]
     def __init__(self):
       self.nnRr = 0.0
@@ -532,6 +532,7 @@ class RecordsLoader:
 
       rec = Record()
       rec.recordName = recordName.split('/')[-1:][0] # record_name
+      rec.atcFilename = atcFilename
 
       # From Alive Database
       if self.aliveEcgDb is not None:
@@ -557,11 +558,28 @@ class RecordsLoader:
         copyRec = copy.deepcopy(rec)
         gqrsGetHrvLead1Filename = toolsBox.getRecordWorkFilename(recordName, 'output.gethrv-gqrs-lead1.txt')
 
-        if not os.path.isfile(gqrsGetHrvLead1Filename):
-          print("ERROR: get_hrv GQRS one line file not found (%s)" % (gqrsGetHrvLead1Filename))
+        if os.path.isfile(gqrsGetHrvLead1Filename):
+          recordGetHrv = self.updateRecordFromGetHrvFile('GQRS', 'PHYSIONET-GET_HRV + HRV-ANALYSIS', gqrsGetHrvLead1Filename, copyRec)
+
+          print("Info:                 [from hrvanalysis with GQRS RR]")
+          copyRec = copy.deepcopy(rec)
+          recordHrvAnalysis = self.hrvAnalysis.updateRecordFromHrvAnalysis('gqrs', recordName, copyRec)
+
+          if recordHrvAnalysis is not None:
+            # merge: keep only poincare's values from HRV Analysis.
+            recordGetHrv.hrv.meanHeartRate = recordHrvAnalysis.hrv.meanHeartRate
+            recordGetHrv.hrv.sd1 = recordHrvAnalysis.hrv.sd1
+            recordGetHrv.hrv.sd2 = recordHrvAnalysis.hrv.sd2
+            recordGetHrv.hrv.sd2sd1Ratio = recordHrvAnalysis.hrv.sd2sd1Ratio
+
+          else:
+            print("ERROR: hrvanalysis GQRS calculation failed (%s)." % (recordName))
+        
+          records.append(recordGetHrv)
+
+        # GetHRV QGRS file not found
         else:
-          gqrs = self.updateRecordFromGetHrvFile('GQRS', 'PHYSIONET-GET_HRV', gqrsGetHrvLead1Filename, copyRec)
-          records.append(gqrs)
+          print("ERROR: get_hrv GQRS one line file not found (%s)" % (gqrsGetHrvLead1Filename))
 
       # GET_HRV - ECGPU
       if QRSAlgorithms.hasECGPU(self.qrsAlgoFlags):
@@ -569,31 +587,29 @@ class RecordsLoader:
         copyRec = copy.deepcopy(rec)
         ecgpuGetHrvLead1Filename = toolsBox.getRecordWorkFilename(recordName, 'output.gethrv-ecgpu-lead1.txt')
 
-        if not os.path.isfile(ecgpuGetHrvLead1Filename):
-          print("ERROR: get_hrv ECPU one line file not found (%s)" % (ecgpuGetHrvLead1Filename))
-        else:
-          ecgpu = self.updateRecordFromGetHrvFile('ECGPU', 'PHYSIONET-GET_HRV', ecgpuGetHrvLead1Filename, copyRec)
-          records.append(ecgpu)
+        if os.path.isfile(ecgpuGetHrvLead1Filename):
+          recordGetHrv = self.updateRecordFromGetHrvFile('ECGPU', 'PHYSIONET-GET_HRV + HRV-ANALYSIS', ecgpuGetHrvLead1Filename, copyRec)
 
-      # HRVANALYSIS - GQRS
-      if QRSAlgorithms.hasGQRS(self.qrsAlgoFlags):
-        print("Info:                 [from hrvanalysis with GQRS RR]")
-        copyRec = copy.deepcopy(rec)
-        gqrs = self.hrvAnalysis.updateRecordFromHrvAnalysis('gqrs', recordName, copyRec)
-        if gqrs is None:
-          print("ERROR: hrvanalysis GQRS calculation failed.")
-        else:
-          records.append(gqrs)
+          print("Info:                 [from hrvanalysis with ECGPU RR]")
+          copyRec = copy.deepcopy(rec)
+          recordHrvAnalysis = self.hrvAnalysis.updateRecordFromHrvAnalysis('ecgpu', recordName, copyRec)
 
-      # HRVANALYSIS - ECGPU
-      if QRSAlgorithms.hasECGPU(self.qrsAlgoFlags):
-        print("Info:                 [from hrvanalysis with ECGPU RR]")
-        copyRec = copy.deepcopy(rec)
-        ecgpu = self.hrvAnalysis.updateRecordFromHrvAnalysis('ecgpu', recordName, copyRec)
-        if ecgpu is None:
-          print("ERROR: hrvanalysis ECGPU calculation failed.")
+          if ecgpu is not None:
+            # merge: keep only poincare's values from HRV Analysis.
+            recordGetHrv.hrv.meanHeartRate = recordHrvAnalysis.hrv.meanHeartRate
+            recordGetHrv.hrv.sd1 = recordHrvAnalysis.hrv.sd1
+            recordGetHrv.hrv.sd2 = recordHrvAnalysis.hrv.sd2
+            recordGetHrv.hrv.sd2sd1Ratio = recordHrvAnalysis.hrv.sd2sd1Ratio
+
+          else:
+            print("ERROR: hrvanalysis ECGPU calculation failed.")
+
+          records.append(recordGetHrv)
+
+        # GetHRV ECGPU file not found
         else:
-          records.append(ecgpu)
+          print("ERROR: get_hrv ECGPU one line file not found (%s)" % (gqrsGetHrvLead1Filename))
+
 
     return records
 
