@@ -43,7 +43,19 @@ class Finder:
 
     return d
 
+class QRSAlgorithms:
+  NONE = 0x00
+  GQRS = 0x01
+  ECGPU = 0x10
+
+  def hasGQRS(flags): return True if flags & QRSAlgorithms.GQRS else False
+  def hasECGPU(flags): return True if flags & QRSAlgorithms.ECGPU else False
+
+  def setGQRS(flags): return flags | QRSAlgorithms.GQRS
+  def setECGPU(flags): return flags | QRSAlgorithms.ECGPU
+
 class ToolsBox:
+
   def __init__(self): pass 
 
   def getRecordWorkFilename(self, recordName, extension):
@@ -415,6 +427,7 @@ class AliveECGDB:
 
   def updateRecord(self, atcFilename, record): # return the updated record
     # IMPORTANT NOTE: Kardia store ZDATERECORDED starting from 2001-01-01 --> we add this constant to get it from now (constant found in Kardia SQLite database too)
+    # NOTE: adding 978307200 seams the way ios itself is recording dates.
     SQL_LOAD_RECORD = "select ZDURATION_MS, datetime(ZDATERECORDEDWITHOFFSET + 978307200, 'unixepoch') as Z_DATETIME,  ZHEARTRATE, ZCOMMENT, ZFILENAME from ZECG where ZFILENAME='%s' or ZENHANCEDFILENAME='%s'" % (atcFilename, atcFilename)
     cursor = self.conn.execute(SQL_LOAD_RECORD)
 
@@ -436,10 +449,11 @@ class AliveECGDB:
 class RecordsLoader:
   WorkingDirectory = 'work'
 
-  def __init__(self, recordNamesDict, aliveEcgDb=None, tryInterpretComments=False):
+  def __init__(self, recordNamesDict, aliveEcgDb=None, tryInterpretComments=False, qrsAlgoFlags=QRSAlgorithms.NONE):
     self.recordNamesDict = recordNamesDict # {recordName: (atcFilename, atcFilepath), ..}
     self.aliveEcgDb = aliveEcgDb 
     self.tryInterpretComments = tryInterpretComments
+    self.qrsAlgoFlags = qrsAlgoFlags
     self.hrvAnalysis = HRVAnalysis()
 
   def updateRecordFromAliveDb(self, atcFilename, rec): # return the update rec: Record()
@@ -506,44 +520,48 @@ class RecordsLoader:
             rec.patientId = results['patientId']
 
       # GET_HRV - GQRS
-      print("Info:                 [from get_hrv with GQRS RR]")
-      copyRec = copy.deepcopy(rec)
-      gqrsGetHrvLead1Filename = toolsBox.getRecordWorkFilename(recordName, 'output.gethrv-gqrs-lead1.txt')
+      if QRSAlgorithms.hasGQRS(self.qrsAlgoFlags):
+        print("Info:                 [from get_hrv with GQRS RR]")
+        copyRec = copy.deepcopy(rec)
+        gqrsGetHrvLead1Filename = toolsBox.getRecordWorkFilename(recordName, 'output.gethrv-gqrs-lead1.txt')
 
-      if not os.path.isfile(gqrsGetHrvLead1Filename):
-        print("ERROR: get_hrv GQRS one line file not found (%s)" % (gqrsGetHrvLead1Filename))
-      else:
-        gqrs = self.updateRecordFromGetHrvFile('GQRS', 'PHYSIONET-GET_HRV', gqrsGetHrvLead1Filename, copyRec)
-        records.append(gqrs)
+        if not os.path.isfile(gqrsGetHrvLead1Filename):
+          print("ERROR: get_hrv GQRS one line file not found (%s)" % (gqrsGetHrvLead1Filename))
+        else:
+          gqrs = self.updateRecordFromGetHrvFile('GQRS', 'PHYSIONET-GET_HRV', gqrsGetHrvLead1Filename, copyRec)
+          records.append(gqrs)
 
       # GET_HRV - ECGPU
-      print("Info:                 [from get_hrv with ECGPU RR]")
-      copyRec = copy.deepcopy(rec)
-      ecgpuGetHrvLead1Filename = toolsBox.getRecordWorkFilename(recordName, 'output.gethrv-ecgpu-lead1.txt')
+      if QRSAlgorithms.hasECGPU(self.qrsAlgoFlags):
+        print("Info:                 [from get_hrv with ECGPU RR]")
+        copyRec = copy.deepcopy(rec)
+        ecgpuGetHrvLead1Filename = toolsBox.getRecordWorkFilename(recordName, 'output.gethrv-ecgpu-lead1.txt')
 
-      if not os.path.isfile(ecgpuGetHrvLead1Filename):
-        print("ERROR: get_hrv ECPU one line file not found (%s)" % (ecgpuGetHrvLead1Filename))
-      else:
-        ecgpu = self.updateRecordFromGetHrvFile('ECGPU', 'PHYSIONET-GET_HRV', ecgpuGetHrvLead1Filename, copyRec)
-        records.append(ecgpu)
+        if not os.path.isfile(ecgpuGetHrvLead1Filename):
+          print("ERROR: get_hrv ECPU one line file not found (%s)" % (ecgpuGetHrvLead1Filename))
+        else:
+          ecgpu = self.updateRecordFromGetHrvFile('ECGPU', 'PHYSIONET-GET_HRV', ecgpuGetHrvLead1Filename, copyRec)
+          records.append(ecgpu)
 
       # HRVANALYSIS - GQRS
-      print("Info:                 [from hrvanalysis with GQRS RR]")
-      copyRec = copy.deepcopy(rec)
-      gqrs = self.hrvAnalysis.updateRecordFromHrvAnalysis('gqrs', recordName, copyRec)
-      if gqrs is None:
-        print("ERROR: hrvanalysis GQRS calculation failed.")
-      else:
-        records.append(gqrs)
+      if QRSAlgorithms.hasGQRS(self.qrsAlgoFlags):
+        print("Info:                 [from hrvanalysis with GQRS RR]")
+        copyRec = copy.deepcopy(rec)
+        gqrs = self.hrvAnalysis.updateRecordFromHrvAnalysis('gqrs', recordName, copyRec)
+        if gqrs is None:
+          print("ERROR: hrvanalysis GQRS calculation failed.")
+        else:
+          records.append(gqrs)
 
       # HRVANALYSIS - ECGPU
-      print("Info:                 [from hrvanalysis with ECGPU RR]")
-      copyRec = copy.deepcopy(rec)
-      ecgpu = self.hrvAnalysis.updateRecordFromHrvAnalysis('ecgpu', recordName, copyRec)
-      if ecgpu is None:
-        print("ERROR: hrvanalysis ECGPU calculation failed.")
-      else:
-        records.append(ecgpu)
+      if QRSAlgorithms.hasECGPU(self.qrsAlgoFlags):
+        print("Info:                 [from hrvanalysis with ECGPU RR]")
+        copyRec = copy.deepcopy(rec)
+        ecgpu = self.hrvAnalysis.updateRecordFromHrvAnalysis('ecgpu', recordName, copyRec)
+        if ecgpu is None:
+          print("ERROR: hrvanalysis ECGPU calculation failed.")
+        else:
+          records.append(ecgpu)
 
     return records
 
@@ -568,7 +586,7 @@ class Processor:
       print("Info: erasing previous log file (%s)" % (self.logFile)) 
       os.remove(self.logFile)
 
-  def loadAndWriteCSV(self, atcFilesDirectory, aliveDbFilename=None, tryInterpretComments=False):
+  def loadAndWriteCSV(self, atcFilesDirectory, qrsAlgoFlags, aliveDbFilename=None, tryInterpretComments=False):
 
     aliveDb = None
     if aliveDbFilename is not None:
@@ -623,7 +641,7 @@ class Processor:
 
 
     print("Info: *** Loading records...")
-    recordsLoader = RecordsLoader(recordNamesDict, aliveDb, tryInterpretComments)
+    recordsLoader = RecordsLoader(recordNamesDict, aliveDb, tryInterpretComments, qrsAlgoFlags)
     records = recordsLoader.loadRecords()
 
     print("Info: *** Writing CSV output file '%s'..." % (self.csvFilename))
@@ -642,12 +660,23 @@ def main():
   ap.add_argument("-a", "--alive-ecg-filename", required=False, help="Alive ECG Database filename.")
   ap.add_argument("-P", "--process-atc-files", action="store_true", required=False, help="process ATC files, load records (HRV and SQL) and write CSV output")
   ap.add_argument("-i", "--try-interpret-comments", action="store_true", help="try interpreting comments from Kardia database.")
+  ap.add_argument("-gqrs", "--use-gqrs", action="store_true", help="Use GQRS as QRS detection algorithm")
+  ap.add_argument("-ecgpu", "--use-ecgpu", action="store_true", help="Use ECGPU as QRS detection algorithm")
   #ap.add_argument("-hrv", "--print-hrv-features", action="store_true", help="Show HRV features (by hrv-analysis lib)")
   args = vars(ap.parse_args())
 
   gDebug = args['verbose']
   doProcessATCFiles = args['process_atc_files']
   hasInterpretComments = args['try_interpret_comments']
+  qrsAlgoFlags = QRSAlgorithms.NONE
+  if args['use_gqrs']:
+    print("Info: using GQRS algorithm")
+    qrsAlgoFlags = QRSAlgorithms.setGQRS(qrsAlgoFlags)
+  if args['use_ecgpu']:
+    print("Info: using ECGPU algorihm")
+    qrsAlgoFlags = QRSAlgorithms.setECGPU(qrsAlgoFlags)
+  if args['use_gqrs'] == False and args['use_ecgpu'] == False:
+    print("Warning: no QRS detection algorithm used!")
 
   # add CURR_DIR + "/"
   atcDirectory = args['atcFilesDirectory']
@@ -667,7 +696,7 @@ def main():
   if doProcessATCFiles:
     print("Info: loading and processing atc files in '%s'" % (atcDirectory))
     p = Processor()
-    r = p.loadAndWriteCSV(atcDirectory, aliveDbFilename, hasInterpretComments)
+    r = p.loadAndWriteCSV(atcDirectory, qrsAlgoFlags, aliveDbFilename, hasInterpretComments)
 
   return r
 
