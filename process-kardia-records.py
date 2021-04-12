@@ -9,6 +9,8 @@ import csv
 import datetime
 import re
 import copy
+from concurrent import futures
+import multiprocessing
 
 import sqlite3
 
@@ -18,6 +20,7 @@ from hrvanalysis import remove_outliers, remove_ectopic_beats, interpolate_nan_v
 CURR_DIR = os.path.dirname(os.path.realpath(__file__))
 
 gDebug = False
+gMaxWorkers = multiprocessing.cpu_count() * 2
 
 # Finder
 # --------------------------------------------------------------------------------------------
@@ -581,11 +584,11 @@ class RecordsLoader:
 class Processor:
   def __init__(self):
     self.csvFilename = CURR_DIR + '/' + 'output.process-kardia.csv'
-    self.logFile = CURR_DIR + '/' + 'output.process-kardia.log'
+    self.logFilename = CURR_DIR + '/' + 'output.process-kardia.log'
 
-    if os.path.isfile(self.logFile):
-      print("Info: erasing previous log file (%s)" % (self.logFile)) 
-      os.remove(self.logFile)
+    if os.path.isfile(self.logFilename):
+      print("Info: erasing previous log file (%s)" % (self.logFilename)) 
+      os.remove(self.logFilename)
 
   def loadAndWriteCSV(self, atcFilesDirectory, qrsAlgoFlags, aliveDbFilename=None, tryInterpretComments=False):
 
@@ -615,18 +618,15 @@ class Processor:
 
       recordNamesDict[recordName] = (atcFilename, atcFilepath)
 
+    def convertAndCalculate(atcfilepath, rname, logFilename):
+      error = False
+      with open(logFilename, "a+") as logFile:
+        print("Info: processing ATC (%s) to record (%s)" % (atcfilepath, rname))
+        print("------ - %s - ---------------------------------" % (rname), file=logFile)
 
-    error = False
-    print("Info: *** Converting ATC -> EDF + calculate HRVs...")
-    for rname in recordNamesDict.keys():
-      (atcfile, atcfilepath) = recordNamesDict[rname]
-
-      print("Info: processing ATC (%s) to record (%s)" % (atcfilepath, rname))
-      print("------ - %s - ---------------------------------" % (rname), file=open(self.logFile, 'a'))
-
-      cmd = "./atc2edf.py -i %s -r %s" % (atcfilepath, rname)
-      #cmd = "./atc2edf.py -i %s -r %s 1>>%s 2>&1" % (atcfilepath, rname, self.logFile)
-      with open(self.logFile, "a+") as logFile:
+        # atc -> edf
+        cmd = "./atc2edf.py -i %s -r %s" % (atcfilepath, rname)
+        #cmd = "./atc2edf.py -i %s -r %s 1>>%s 2>&1" % (atcfilepath, rname, self.logFile)
         process = subprocess.Popen(cmd, stdout=logFile, stderr=logFile, shell=True)
         ret = process.wait()
         if ret != 0:
@@ -634,6 +634,7 @@ class Processor:
           error = True
         else:
 
+          # Calculate HRV
           cmd = "./calculate.sh %s" % (rname)
           #cmd = "./calculate.sh %s 1>>%s 2>&1" % (rname, self.logFile)
           process = subprocess.Popen(cmd, stdout=logFile, stderr=logFile, shell=True)
@@ -641,11 +642,25 @@ class Processor:
           if ret != 0:
             print("ERROR: Unable to calculate recordName (%s)" % (rname))
             error = True
-        
-    if error:
-      print("ERROR: There were errors converting and/or calculating HRVs.")
-      return False 
 
+      if error:
+        print("ERROR: There were errors converting and/or calculating HRVs.")
+        return False 
+
+    with futures.ProcessPoolExecutor(max_workers=gMaxWorkers) as executor:
+      listFutures = []
+      print("Info: *** Converting ATC -> EDF + calculate HRVs...")
+
+      for rname in recordNamesDict.keys():
+        (atcfile, atcfilepath) = recordNamesDict[rname]
+
+        # DO NOT USE FUTURES YET: SUBPROCESS() ISN'T PICKLABLE'
+        convertAndCalculate(atcfilepath[:], rname[:], self.logFilename[:])
+        #
+        #future = executor.submit(convertAndCalculate, atcfilepath[:], rname[:], self.logFilename[:])
+        #listFutures.append(future)
+
+      for f in listFutures: f.result(timeout=None) # wait for everybody :)
 
     print("Info: *** Loading records...")
     recordsLoader = RecordsLoader(recordNamesDict, aliveDb, tryInterpretComments, qrsAlgoFlags)
