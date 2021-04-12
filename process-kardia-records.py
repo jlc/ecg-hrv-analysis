@@ -432,13 +432,41 @@ class AliveECGDB:
   def updateRecord(self, atcFilename, record): # return the updated record
     # IMPORTANT NOTE: Kardia store ZDATERECORDED starting from 2001-01-01 --> we add this constant to get it from now (constant found in Kardia SQLite database too)
     # NOTE: adding 978307200 seams the way ios itself is recording dates.
-    SQL_LOAD_RECORD = "select ZDURATION_MS, datetime(ZDATERECORDEDWITHOFFSET + 978307200, 'unixepoch') as Z_DATETIME,  ZHEARTRATE, ZCOMMENT, ZFILENAME from ZECG where ZFILENAME='%s' or ZENHANCEDFILENAME='%s'" % (atcFilename, atcFilename)
-    cursor = self.conn.execute(SQL_LOAD_RECORD)
 
-    row = cursor.fetchone()
-    if row is None:
-      #print("ERROR: AliveECG Database doesn't have record with ATC filename '%s'" % (atcFilename))
-      return None
+    #SQL_LOAD_RECORD = "select ZDURATION_MS, datetime(ZDATERECORDEDWITHOFFSET + 978307200, 'unixepoch') as Z_DATETIME,  ZHEARTRATE, ZCOMMENT, ZFILENAME from ZECG where ZFILENAME='%s' or ZENHANCEDFILENAME='%s'" % (atcFilename, atcFilename)
+
+    def searchEnhancedAtcFilename(atcFilename):
+      SQL_LOAD_RECORD = "select ZDURATION_MS, datetime(ZDATERECORDEDWITHOFFSET + 978307200, 'unixepoch') as Z_DATETIME,  ZHEARTRATE, ZCOMMENT, ZFILENAME from ZECG where ZENHANCEDFILENAME='%s'" % (atcFilename)
+      cursor = self.conn.execute(SQL_LOAD_RECORD)
+      return cursor
+
+    def searchAtcFilename(atcFilename):
+      print("Debug: searching match in Kardia Db with NOT enhanced filename (%s)" % (atcFilename))
+      SQL_LOAD_RECORD = "select ZDURATION_MS, datetime(ZDATERECORDEDWITHOFFSET + 978307200, 'unixepoch') as Z_DATETIME,  ZHEARTRATE, ZCOMMENT, ZFILENAME from ZECG where ZFILENAME='%s'" % (atcFilename)
+      cursor = self.conn.execute(SQL_LOAD_RECORD)
+      return cursor
+
+    row = None
+    if "enhanced" in atcFilename:
+      cursor = searchEnhancedAtcFilename(atcFilename) 
+      row = cursor.fetchone()
+      if row is None:
+        cursor = searchAtcFilename(atcFilename)
+        row = cursor.fetchone()
+        if row is None:
+          print("ERROR: AliveECGDB.updateRecord: atcFilename does not exist in Alive SQL Db (no where!) (%s)" % (atcFilename))
+          return None
+        else:
+          print("WARNING: AliveECGDB.updateRecord: atcFilename exist in Alive SQL Db, BUT NOT WITHIN ENHANCED ZFILENAME (%s)" % (atcFilename))
+
+    else:
+        cursor = searchAtcFilename(atcFilename)
+        row = cursor.fetchone()
+        if row is None:
+          print("ERROR: AliveECGDB.updateRecord: atcFilename does not exist in Alive SQL DB (not in non-enhanced filename) (%s)" % (atcFilename))
+          return None
+    
+    # row should never be None
 
     record.durationMs = int(row[0])
     record.datetime = str(row[1])
