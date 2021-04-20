@@ -33,43 +33,49 @@ ANN_ECGPU_LEAD2=ecgpu-lead2
 # OUTPUTS (in data/work)
 ANN_GQRS_LEAD1_FILE=$RECORD_WORK_FILE.$ANN_GQRS_LEAD1
 ANN_GQRS_LEAD2_FILE=$RECORD_WORK_FILE.$ANN_GQRS_LEAD2
-ANN_ECGPU_LEAD1_FILE=$RECORD_WORK_FILE.$ANN_ECGPU_LEAD1
-ANN_ECGPU_LEAD2_FILE=$RECORD_WORK_FILE.$ANN_ECGPU_LEAD2
+#ANN_ECGPU_LEAD1_FILE=$RECORD_WORK_FILE.$ANN_ECGPU_LEAD1
+#ANN_ECGPU_LEAD2_FILE=$RECORD_WORK_FILE.$ANN_ECGPU_LEAD2
 
 # RR intervals files
 RR_GQRS_LEAD1_FILE=$RECORD_WORK_FILE.$ANN_GQRS_LEAD1.rr
 RR_GQRS_LEAD2_FILE=$RECORD_WORK_FILE.$ANN_GQRS_LEAD2.rr
-RR_ECGPU_LEAD1_FILE=$RECORD_WORK_FILE.$ANN_ECGPU_LEAD1.rr
-RR_ECGPU_LEAD2_FILE=$RECORD_WORK_FILE.$ANN_ECGPU_LEAD2.rr
+#RR_ECGPU_LEAD1_FILE=$RECORD_WORK_FILE.$ANN_ECGPU_LEAD1.rr
+#RR_ECGPU_LEAD2_FILE=$RECORD_WORK_FILE.$ANN_ECGPU_LEAD2.rr
 
 # Filtered RR intervals files
 RR_FILT_GQRS_LEAD1_FILE=$RECORD_WORK_FILE.$ANN_GQRS_LEAD1.frr 
 RR_FILT_GQRS_LEAD2_FILE=$RECORD_WORK_FILE.$ANN_GQRS_LEAD2.frr 
-RR_FILT_ECGPU_LEAD1_FILE=$RECORD_WORK_FILE.$ANN_ECGPU_LEAD1.frr
-RR_FILT_ECGPU_LEAD2_FILE=$RECORD_WORK_FILE.$ANN_ECGPU_LEAD2.frr
+#RR_FILT_ECGPU_LEAD1_FILE=$RECORD_WORK_FILE.$ANN_ECGPU_LEAD1.frr
+#RR_FILT_ECGPU_LEAD2_FILE=$RECORD_WORK_FILE.$ANN_ECGPU_LEAD2.frr
 
 # RR intervals files for kubios
 RR_GQRS_LEAD1_KUBIOS_FILE=$RECORD_WORK_FILE.$ANN_GQRS_LEAD1.rr.kubios.txt
 RR_GQRS_LEAD2_KUBIOS_FILE=$RECORD_WORK_FILE.$ANN_GQRS_LEAD2.rr.kubios.txt
-RR_ECGPU_LEAD1_KUBIOS_FILE=$RECORD_WORK_FILE.$ANN_ECGPU_LEAD1.rr.kubios.txt
-RR_ECGPU_LEAD2_KUBIOS_FILE=$RECORD_WORK_FILE.$ANN_ECGPU_LEAD2.rr.kubios.txt
+#RR_ECGPU_LEAD1_KUBIOS_FILE=$RECORD_WORK_FILE.$ANN_ECGPU_LEAD1.rr.kubios.txt
+#RR_ECGPU_LEAD2_KUBIOS_FILE=$RECORD_WORK_FILE.$ANN_ECGPU_LEAD2.rr.kubios.txt
 
 #RR_FILT_GQRS_LEAD1_KUBIOS_FILE=$RECORD_WORK_FILE.$ANN_GQRS_LEAD1.frr.kubios.txt
 #RR_FILT_ECGPU_LEAD1_KUBIOS_FILE=$RECORD_WORK_FILE.$ANN_ECGPU_LEAD1.frr.kubios.txt
 
 GETHRV_GQRS_LEAD1_FILE=$RECORD_WORK_FILE.output.gethrv-gqrs-lead1.txt
 GETHRV_GQRS_LEAD2_FILE=$RECORD_WORK_FILE.output.gethrv-gqrs-lead2.txt
-GETHRV_ECGPU_LEAD1_FILE=$RECORD_WORK_FILE.output.gethrv-ecgpu-lead1.txt
-GETHRV_ECGPU_LEAD2_FILE=$RECORD_WORK_FILE.output.gethrv-ecgpu-lead2.txt
+#GETHRV_ECGPU_LEAD1_FILE=$RECORD_WORK_FILE.output.gethrv-ecgpu-lead1.txt
+#GETHRV_ECGPU_LEAD2_FILE=$RECORD_WORK_FILE.output.gethrv-ecgpu-lead2.txt
 
 SAMPLES_FILE=$RECORD_WORK_FILE.output.samples.txt
 
 # OUTPUTS (in data/)
 WFDB_DESC_FILE=$RECORD_WORK_FILE.output.desc.txt
 
-OUTPUT_FILE=$RECORD_WORK_FILE.output.gethrv.txt
+OUTPUT_FILE=$RECORD_WORK_FILE.output.gethrv-gqrs-lead1.verbose.txt
 #OUTPUT_FILTERED_FILE=$RECORD_WORK_FILE.output-hrv.filtered.txt
+
+OUTPUT_COMMANDS=$RECORD_WORK_FILE.output.cmds.txt
 DATE=`date`
+echo " -- ($DATE) -- Commands exectuted to calculate the HRV." > $OUTPUT_COMMANDS
+echo " --# " >> $OUTPUT_COMMANDS
+
+
 
 if [[ -e $RECORD_FILE_HEA &&
       -e $RECORD_FILE_DAT ]]; then
@@ -98,12 +104,14 @@ echo ""
 echo " * edf2mit... (Convert EDF to MIT format)"
 echo " ---------------------------------------------------------"
 edf2mit -i $EDF_FILE -r $RECORD_WORK_ID
+echo "edf2mit -i $EDF_FILE -r $RECORD_WORK_ID" >> $OUTPUT_COMMANDS
 if [[ $? -ne 0 ]]; then echo "Error: edf2mit"; exit 1; fi 
 
 echo ""
 echo " * wfdbdesc... (Describe freshly converted WFDB)"
 echo " ---------------------------------------------------------"
 wfdbdesc $RECORD_WORK_ID > $WFDB_DESC_FILE
+echo "wfdbdesc $RECORD_WORK_ID > $WFDB_DESC_FILE" >> $OUTPUT_COMMANDS
 if [[ $? -ne 0 ]]; then echo "Error: wfdbdesc failed"; exit 1; fi 
 
 echo ""
@@ -115,6 +123,7 @@ echo " ---------------------------------------------------------"
 # -s X: only for one signals (we want them all)
 # all samples in one files
 rdsamp -r $RECORD_WORK_ID -P -v > $SAMPLES_FILE
+echo "rdsamp -r $RECORD_WORK_ID -P -v > $SAMPLES_FILE" >> $OUTPUT_COMMANDS
 if [[ $? -ne 0 ]]; then echo "Error: rdsamp lead 0"; exit 1; fi 
 
 HAS_LEAD1=`wfdbsignals $RECORD_WORK_ID | grep '^leadI$' | wc -l`
@@ -133,22 +142,25 @@ echo ""
 echo " * gqrs..."
 echo " ---------------------------------------------------------"
 gqrs -r $RECORD_WORK_ID -o $ANN_GQRS_LEAD1 -s leadI 
+echo "gqrs -r $RECORD_WORK_ID -o $ANN_GQRS_LEAD1 -s leadI" >> $OUTPUT_COMMANDS
 if [[ $? -ne 0 ]]; then echo "Error: gqrs leadI"; exit 1; fi 
 if [[ $HAS_LEAD2 -eq 1 ]]; then
     gqrs -r $RECORD_WORK_ID -o $ANN_GQRS_LEAD2 -s leadII 
+    echo "gqrs -r $RECORD_WORK_ID -o $ANN_GQRS_LEAD2 -s leadII" >> $OUTPUT_COMMANDS
     if [[ $? -ne 0 ]]; then echo "Error: gqrs leadII"; exit 1; fi 
     fi
 
-echo ""
-echo " * ecgpu..."
-echo " ---------------------------------------------------------"
-ecgpuwave -r $RECORD_WORK_ID -a $ANN_ECGPU_LEAD1 -s 0 # 0: leadI
-if [[ $? -ne 0 ]]; then echo "Error: ecgpu leadI"; exit 1; fi 
-rm fort.20 fort.21
-if [[ $HAS_LEAD2 -eq 1 ]]; then
-    ecgpuwave -r $RECORD_WORK_ID -a $ANN_ECGPU_LEAD2 -s 1 # 1: leadII
-    if [[ $? -ne 0 ]]; then echo "Error: ecgpu leadII"; exit 1; fi 
-    fi
+# ECGPU is DISABLED
+#echo ""
+#echo " * ecgpu..."
+#echo " ---------------------------------------------------------"
+#ecgpuwave -r $RECORD_WORK_ID -a $ANN_ECGPU_LEAD1 -s 0 # 0: leadI
+#if [[ $? -ne 0 ]]; then echo "Error: ecgpu leadI"; exit 1; fi 
+#rm fort.20 fort.21
+#if [[ $HAS_LEAD2 -eq 1 ]]; then
+#    ecgpuwave -r $RECORD_WORK_ID -a $ANN_ECGPU_LEAD2 -s 1 # 1: leadII
+#    if [[ $? -ne 0 ]]; then echo "Error: ecgpu leadII"; exit 1; fi 
+#    fi
 
 
 # format of the RR files:
@@ -174,17 +186,21 @@ echo " ---------------------------------------------------------"
 # IMPORTANT: if '-p N'' => only NN intervals
 #
 ann2rr -r $RECORD_WORK_ID -a $ANN_GQRS_LEAD1 -V s -i s8 > $RR_GQRS_LEAD1_KUBIOS_FILE
+echo "ann2rr -r $RECORD_WORK_ID -a $ANN_GQRS_LEAD1 -V s -i s8 > $RR_GQRS_LEAD1_KUBIOS_FILE" >> $OUTPUT_COMMANDS
 if [[ $? -ne 0 ]]; then echo "Error: ann2rr leadI"; exit 1; fi 
 if [[ $HAS_LEAD2 -eq 1 ]]; then
     ann2rr -r $RECORD_WORK_ID -a $ANN_GQRS_LEAD2 -V s -i s8 > $RR_GQRS_LEAD2_KUBIOS_FILE
+    echo "ann2rr -r $RECORD_WORK_ID -a $ANN_GQRS_LEAD2 -V s -i s8 > $RR_GQRS_LEAD2_KUBIOS_FILE" >> $OUTPUT_COMMANDS
     if [[ $? -ne 0 ]]; then echo "Error: ann2rr leadII"; exit 1; fi 
     fi
-ann2rr -r $RECORD_WORK_ID -a $ANN_ECGPU_LEAD1 -V s -i s8 > $RR_ECGPU_LEAD1_KUBIOS_FILE
-if [[ $? -ne 0 ]]; then echo "Error: ecgpu leadI"; exit 1; fi 
-if [[ $HAS_LEAD2 -eq 1 ]]; then
-    ann2rr -r $RECORD_WORK_ID -a $ANN_ECGPU_LEAD2 -V s -i s8 > $RR_ECGPU_LEAD2_KUBIOS_FILE
-    if [[ $? -ne 0 ]]; then echo "Error: ecgpu leadII"; exit 1; fi 
-    fi
+
+# ECGPU is DISABLED
+#ann2rr -r $RECORD_WORK_ID -a $ANN_ECGPU_LEAD1 -V s -i s8 > $RR_ECGPU_LEAD1_KUBIOS_FILE
+#if [[ $? -ne 0 ]]; then echo "Error: ecgpu leadI"; exit 1; fi 
+#if [[ $HAS_LEAD2 -eq 1 ]]; then
+#    ann2rr -r $RECORD_WORK_ID -a $ANN_ECGPU_LEAD2 -V s -i s8 > $RR_ECGPU_LEAD2_KUBIOS_FILE
+#    if [[ $? -ne 0 ]]; then echo "Error: ecgpu leadII"; exit 1; fi 
+#    fi
 
 ### NOTE: Filtering may not be used
 ###
@@ -266,17 +282,21 @@ echo " ---------------------------------------------------------"
 # Output one line 
 #
 get_hrv -L -m -M -p "50" $RECORD_WORK_ID $ANN_GQRS_LEAD1 > $GETHRV_GQRS_LEAD1_FILE
+echo "get_hrv -L -m -M -p '50' $RECORD_WORK_ID $ANN_GQRS_LEAD1 > $GETHRV_GQRS_LEAD1_FILE" >> $OUTPUT_COMMANDS
 if [[ $? -ne 0 ]]; then echo "Error: get_hrv gqrs leadI"; exit 1; fi 
 if [[ $HAS_LEAD2 -eq 1 ]]; then
     get_hrv -L -m -M -p "50" $RECORD_WORK_ID $ANN_GQRS_LEAD2 > $GETHRV_GQRS_LEAD2_FILE
+    echo "get_hrv -L -m -M -p '50' $RECORD_WORK_ID $ANN_GQRS_LEAD2 > $GETHRV_GQRS_LEAD2_FILE" >> $OUTPUT_COMMANDS
     if [[ $? -ne 0 ]]; then echo "Error: get_hrv gqrs leadII"; exit 1; fi 
     fi
-get_hrv -L -m -M -p "50" $RECORD_WORK_ID $ANN_ECGPU_LEAD1 > $GETHRV_ECGPU_LEAD1_FILE
-if [[ $? -ne 0 ]]; then echo "Error: get_hrv ecgpu leadI"; exit 1; fi 
-if [[ $HAS_LEAD2 -eq 1 ]]; then
-    get_hrv -L -m -M -p "50" $RECORD_WORK_ID $ANN_ECGPU_LEAD2 > $GETHRV_ECGPU_LEAD2_FILE
-    if [[ $? -ne 0 ]]; then echo "Error: get_hrv ecgpu leadII"; exit 1; fi 
-    fi
+
+# ECGPU is DISABLED
+#get_hrv -L -m -M -p "50" $RECORD_WORK_ID $ANN_ECGPU_LEAD1 > $GETHRV_ECGPU_LEAD1_FILE
+#if [[ $? -ne 0 ]]; then echo "Error: get_hrv ecgpu leadI"; exit 1; fi 
+#if [[ $HAS_LEAD2 -eq 1 ]]; then
+#    get_hrv -L -m -M -p "50" $RECORD_WORK_ID $ANN_ECGPU_LEAD2 > $GETHRV_ECGPU_LEAD2_FILE
+#    if [[ $? -ne 0 ]]; then echo "Error: get_hrv ecgpu leadII"; exit 1; fi 
+#    fi
 
 
 #
@@ -285,22 +305,25 @@ if [[ $HAS_LEAD2 -eq 1 ]]; then
 echo $DATE > $OUTPUT_FILE
 
 echo "" >> $OUTPUT_FILE
-echo "GQRS - LEAD II :" >> $OUTPUT_FILE
+echo "GQRS - LEAD I :" >> $OUTPUT_FILE
 get_hrv -L -m -M -p "50" $RECORD_WORK_ID $ANN_GQRS_LEAD1 >> $OUTPUT_FILE
+echo "get_hrv -L -m -M -p '50' $RECORD_WORK_ID $ANN_GQRS_LEAD1 >> $OUTPUT_FILE" >> $OUTPUT_COMMANDS
 if [[ $? -ne 0 ]]; then echo "Error: get_hrv gqrs leadI"; exit 1; fi 
 if [[ $HAS_LEAD2 -eq 1 ]]; then
     get_hrv -L -m -M -p "50" $RECORD_WORK_ID $ANN_GQRS_LEAD2 >> $OUTPUT_FILE
+    echo "get_hrv -L -m -M -p '50' $RECORD_WORK_ID $ANN_GQRS_LEAD2 >> $OUTPUT_FILE" >> $OUTPUT_COMMANDS
     if [[ $? -ne 0 ]]; then echo "Error: get_hrv gqrs leadII"; exit 1; fi 
     fi
 
-echo "" >> $OUTPUT_FILE
-echo "ECGPU - LEAD II :" >> $OUTPUT_FILE
-get_hrv -L -m -M -p "50" $RECORD_WORK_ID $ANN_ECGPU_LEAD1 >> $OUTPUT_FILE
-if [[ $? -ne 0 ]]; then echo "Error: get_hrv ecgpu leadI"; exit 1; fi 
-if [[ $HAS_LEAD2 -eq 1 ]]; then
-    get_hrv -L -m -M -p "50" $RECORD_WORK_ID $ANN_ECGPU_LEAD2 >> $OUTPUT_FILE
-    if [[ $? -ne 0 ]]; then echo "Error: get_hrv ecgpu leadII"; exit 1; fi 
-    fi
+# ECGPU is DISABLED
+#echo "" >> $OUTPUT_FILE
+#echo "ECGPU - LEAD II :" >> $OUTPUT_FILE
+#get_hrv -L -m -M -p "50" $RECORD_WORK_ID $ANN_ECGPU_LEAD1 >> $OUTPUT_FILE
+#if [[ $? -ne 0 ]]; then echo "Error: get_hrv ecgpu leadI"; exit 1; fi 
+#if [[ $HAS_LEAD2 -eq 1 ]]; then
+#    get_hrv -L -m -M -p "50" $RECORD_WORK_ID $ANN_ECGPU_LEAD2 >> $OUTPUT_FILE
+#    if [[ $? -ne 0 ]]; then echo "Error: get_hrv ecgpu leadII"; exit 1; fi 
+#    fi
 
 echo "" >> $OUTPUT_FILE
 echo "------------------------------------------------------" >> $OUTPUT_FILE
@@ -310,23 +333,26 @@ echo "" >> $OUTPUT_FILE
 echo "*** GQRS ***" >> $OUTPUT_FILE
 echo " * LEAD I :" >> $OUTPUT_FILE
 get_hrv -m -M -p "50" $RECORD_WORK_ID $ANN_GQRS_LEAD1 >> $OUTPUT_FILE
+echo "get_hrv -m -M -p '50' $RECORD_WORK_ID $ANN_GQRS_LEAD1 >> $OUTPUT_FILE" >> $OUTPUT_COMMANDS
 if [[ $? -ne 0 ]]; then echo "Error: get_hrv gqrs leadI"; exit 1; fi 
 if [[ $HAS_LEAD2 -eq 1 ]]; then
     echo " * LEAD II :" >> $OUTPUT_FILE
     get_hrv -m -M -p "50" $RECORD_WORK_ID $ANN_GQRS_LEAD2 >> $OUTPUT_FILE
+    echo "get_hrv -m -M -p '50' $RECORD_WORK_ID $ANN_GQRS_LEAD2 >> $OUTPUT_FILE" >> $OUTPUT_COMMANDS
     if [[ $? -ne 0 ]]; then echo "Error: get_hrv gqrs leadII"; exit 1; fi 
     fi
 
-echo "" >> $OUTPUT_FILE
-echo "*** ECGPU ***" >> $OUTPUT_FILE
-echo " * LEAD I :" >> $OUTPUT_FILE
-get_hrv -m -M -p "50" $RECORD_WORK_ID $ANN_ECGPU_LEAD1 >> $OUTPUT_FILE
-if [[ $? -ne 0 ]]; then echo "Error: get_hrv ecgpu leadI"; exit 1; fi 
-if [[ $HAS_LEAD2 -eq 1 ]]; then
-    echo " *  LEAD II :" >> $OUTPUT_FILE
-    get_hrv -m -M -p "50" $RECORD_WORK_ID $ANN_ECGPU_LEAD2 >> $OUTPUT_FILE
-    if [[ $? -ne 0 ]]; then echo "Error: get_hrv ecgpu leadII"; exit 1; fi 
-    fi
+# ECGPU is DISABLED
+#echo "" >> $OUTPUT_FILE
+#echo "*** ECGPU ***" >> $OUTPUT_FILE
+#echo " * LEAD I :" >> $OUTPUT_FILE
+#get_hrv -m -M -p "50" $RECORD_WORK_ID $ANN_ECGPU_LEAD1 >> $OUTPUT_FILE
+#if [[ $? -ne 0 ]]; then echo "Error: get_hrv ecgpu leadI"; exit 1; fi 
+#if [[ $HAS_LEAD2 -eq 1 ]]; then
+#    echo " *  LEAD II :" >> $OUTPUT_FILE
+#    get_hrv -m -M -p "50" $RECORD_WORK_ID $ANN_ECGPU_LEAD2 >> $OUTPUT_FILE
+#    if [[ $? -ne 0 ]]; then echo "Error: get_hrv ecgpu leadII"; exit 1; fi 
+#    fi
 
 
 
@@ -365,13 +391,4 @@ if [[ $HAS_LEAD2 -eq 1 ]]; then
 echo ""
 echo "done."
 exit 0
-
-# edf2mit -i e63w4ulrq3o2b32pv3u9avw2p.atc.edf -r e63w4ulrq3o2b32pv3u9avw2p
-# 
-# ecgpuwave -r e63w4ulrq3o2b32pv3u9avw2p -a ecgpu -s 1
-# gqrs -r e63w4ulrq3o2b32pv3u9avw2p -o gqrs -s 1
-# 
-# ann2rr -r e63w4ulrq3o2b32pv3u9avw2p -a gqrs0 -i s -V s -p N  > e63w4ulrq3o2b32pv3u9avw2p.gqrs0.rr.txt
-# 
-# get_hrv -R e63w4ulrq3o2b32pv3u9avw2p.gqrs0.rr.txt > e63w4ulrq3o2b32pv3u9avw2p.gqrs0.rr.hrv
 
