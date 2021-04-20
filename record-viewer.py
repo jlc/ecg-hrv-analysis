@@ -103,18 +103,33 @@ def readSamples(samplesCsvFile): # ( [sec1, sec2, ...], samples{'title': [values
 def plotAllSignals(times, samples):
 
   nbSignals = len(samples.keys())
-  fig, ax = plt.subplots(nbSignals)
 
-  sig = 0
-  for title in samples.keys():
-    ax[sig].plot(times, samples[title])
-    ax[sig].set_title("%s" % (title))
-    ax[sig].set_xlabel('time')
-    ax[sig].set_ylabel('mV')
+  if nbSignals == 1:
+    title = list(samples.keys())[0]
 
-    sig += 1
+    plt.plot(times, samples[title], label=title)
+    plt.xlabel('time')
+    plt.ylabel('mV')
+    plt.title(title)
+    plt.legend()
 
-  plt.show()
+    plt.show()
+
+  else:
+    fig, ax = plt.subplots(nbSignals)
+
+    sig = 0
+    for title in samples.keys():
+      print("DEBUG: " + title)
+      print("DENUG: " + str(sig))
+      ax[sig].plot(times, samples[title])
+      ax[sig].set_title("%s" % (title))
+      ax[sig].set_xlabel('time')
+      ax[sig].set_ylabel('mV')
+
+      sig += 1
+
+    plt.show()
 
 def plotRR(times, sample, rrTimes, rrValues, title, lead, rrLabel):
 
