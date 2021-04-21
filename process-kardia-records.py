@@ -68,7 +68,7 @@ class ToolsBox:
       recordFile = CURR_DIR + '/' + recordName # curr_dir + blah/data/b6
       recordFileDir = '/'.join( recordFile.split('/')[:-1] ) # curr_dir + blah/data
       recordWorkDir = os.path.join(recordFileDir, RecordsLoader.WorkingDirectory) # curr_dir + blah/data/work
-      recordWorkFilename = os.path.join(recordWorkDir, recordId ) + '.' + extension # curr_dir + blah/data/work/b6.extension
+      recordWorkFilename = os.path.join(recordWorkDir, recordId ) + extension # curr_dir + blah/data/work/b6.extension
       return recordWorkFilename
 
   def getRecordId(self, recordName):
@@ -236,8 +236,8 @@ class HRVAnalysis:
     return results
 
   def calculateHrv(self, qrsAlgo, recordName):
-    samplesCsvFile = toolsBox.getRecordWorkFilename(recordName, "output.samples.txt")
-    rrKubiosLead1File = toolsBox.getRecordWorkFilename(recordName, "%s-lead1.rr.kubios.txt" % (qrsAlgo))
+    samplesCsvFile = toolsBox.getRecordWorkFilename(recordName, ".output.samples.txt")
+    rrKubiosLead1File = toolsBox.getRecordWorkFilename(recordName, ".%s-lead1.rr.kubios.txt" % (qrsAlgo))
 
     if not os.path.isfile(samplesCsvFile):
       print("ERROR: record samples file does not exists (%s)." % (samplesCsvFile))
@@ -556,7 +556,7 @@ class RecordsLoader:
       if QRSAlgorithms.hasGQRS(self.qrsAlgoFlags):
         print("Info:                 [from get_hrv with GQRS RR]")
         copyRec = copy.deepcopy(rec)
-        gqrsGetHrvLead1Filename = toolsBox.getRecordWorkFilename(recordName, 'output.gethrv-gqrs-lead1.txt')
+        gqrsGetHrvLead1Filename = toolsBox.getRecordWorkFilename(recordName, '.output.gethrv-gqrs-lead1.txt')
 
         if os.path.isfile(gqrsGetHrvLead1Filename):
           recordGetHrv = self.updateRecordFromGetHrvFile('GQRS', 'PHYSIONET-GET_HRV + HRV-ANALYSIS', gqrsGetHrvLead1Filename, copyRec)
@@ -585,7 +585,7 @@ class RecordsLoader:
       if QRSAlgorithms.hasECGPU(self.qrsAlgoFlags):
         print("Info:                 [from get_hrv with ECGPU RR]")
         copyRec = copy.deepcopy(rec)
-        ecgpuGetHrvLead1Filename = toolsBox.getRecordWorkFilename(recordName, 'output.gethrv-ecgpu-lead1.txt')
+        ecgpuGetHrvLead1Filename = toolsBox.getRecordWorkFilename(recordName, '.output.gethrv-ecgpu-lead1.txt')
 
         if os.path.isfile(ecgpuGetHrvLead1Filename):
           recordGetHrv = self.updateRecordFromGetHrvFile('ECGPU', 'PHYSIONET-GET_HRV + HRV-ANALYSIS', ecgpuGetHrvLead1Filename, copyRec)
@@ -671,6 +671,7 @@ class Processor:
         # atc -> edf
         cmd = "./atc2edf.py -i %s -r %s" % (atcfilepath, rname)
         #cmd = "./atc2edf.py -i %s -r %s 1>>%s 2>&1" % (atcfilepath, rname, self.logFile)
+        print("------ - %s - ATC2EDF.PY: %s" % (rname, cmd), file=logFile)
         process = subprocess.Popen(cmd, stdout=logFile, stderr=logFile, shell=True)
         ret = process.wait()
         if ret != 0:
@@ -681,11 +682,24 @@ class Processor:
           # Calculate HRV
           cmd = "./calculate.sh %s" % (rname)
           #cmd = "./calculate.sh %s 1>>%s 2>&1" % (rname, self.logFile)
+          print("------ - %s - CALCULATE.SH: %s" % (rname, cmd), file=logFile)
           process = subprocess.Popen(cmd, stdout=logFile, stderr=logFile, shell=True)
           ret = process.wait()
           if ret != 0:
             print("ERROR: Unable to calculate recordName (%s)" % (rname))
             error = True
+
+          else:
+
+            # Generate ECG + QRS image
+            workingRname = toolsBox.getRecordWorkFilename(rname, "")
+            cmd ="./record-viewer.py -gqrs -o -r1 %s" % (workingRname)
+            print("------ - %s - RECORD-VIEWER.PY: %s" % (rname, cmd), file=logFile)
+            process = subprocess.Popen(cmd, stdout=logFile, stderr=logFile, shell=True)
+            ret = process.wait()
+            if ret != 0:
+              print("ERROR: Unable to  generate image of record (%s)" % (rname))
+              error = True
 
       if error:
         print("ERROR: There were errors converting and/or calculating HRVs.")

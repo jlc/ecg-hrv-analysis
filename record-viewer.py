@@ -131,7 +131,7 @@ def plotAllSignals(times, samples):
 
     plt.show()
 
-def plotRR(times, sample, rrTimes, rrValues, title, lead, rrLabel):
+def plotRR(times, sample, rrTimes, rrValues, title, lead, rrLabel, saveInsteadOfPlot=False, saveRecordName=""):
 
   yMin = min(sample)
   yMax = max(sample)
@@ -143,7 +143,11 @@ def plotRR(times, sample, rrTimes, rrValues, title, lead, rrLabel):
   plt.ylabel('mV')
   plt.title(title)
   plt.legend()
-  plt.show()
+
+  if saveInsteadOfPlot:
+    plt.savefig(saveRecordName, bbox_inches='tight', dpi=300)
+  else:
+    plt.show()
 
 def plotCompareRecordsWithRR(r1Title, r1Times, r1Samples, r1rrTimes, r1rrValues, r2Title, r2Times, r2Samples, r2rrTimes, r2rrValues):
 
@@ -354,6 +358,7 @@ def main():
   ap.add_argument("-r1", "--record1Name", required=True, help="record 1 name") # type=int, default=42, action=
   ap.add_argument("-r2", "--record2Name", required=False, help="record 2 name") # type=int, default=42, action=
   ap.add_argument("-v", "--verbose", action='store_true', help="print verbose")
+  ap.add_argument("-o", "--output", action='store_true', help="Save figure to file of recordName.output.gqrs-lead1.png")
   ap.add_argument("-6", "--plot-6-signals", action='store_true', help="Plot 6 signals one below the other")
   ap.add_argument("-gqrs", "--plot-leadI-with-rr-gqrs", action="store_true", help="Plot Record 1 leadI and RR calculated by GQRS")
   ap.add_argument("-cmpqrs", "--plot-compare-record12-with-rr-gqrs", action="store_true", help="Plot to compare record 1 and record 2 with RR calculated by GQRS")
@@ -368,12 +373,16 @@ def main():
   #doPlotLeadIIWithRRs = args['plot_leadII_with_rr_gqrs_ecgpu']
   doPrintHrvFeatures = args['print_hrv_features']
 
-  #print("CURR_DIR: ", CURR_DIR)
-  #print("recordName: ", args['recordName'])
+  def makeFilename(rname, ext):
+    if rname[0] == '/':
+      output = rname + ext
+    else:
+      output = CURR_DIR + '/' + rname + ext
+    return output
 
   if args['plot_6_signals']:
     print(" *** Plotting 6 signals")
-    samplesCsvFile = CURR_DIR + "/" + args['record1Name'] + ".output.samples.txt"
+    samplesCsvFile = makeFilename(args['record1Name'], ".output.samples.txt")
 
     times, samples = readSamples(samplesCsvFile)
 
@@ -382,21 +391,27 @@ def main():
   if args['plot_leadI_with_rr_gqrs']:
     print(" *** Plotting LeadI wtih RR calculated by GQRS.")
 
-    samplesCsvFile = CURR_DIR + "/" + args['record1Name'] + ".output.samples.txt"
-    rrKubiosGqrsLead1File = CURR_DIR + "/" + args['record1Name'] + ".gqrs-lead1.rr.kubios.txt"
+    samplesCsvFile = makeFilename(args['record1Name'], ".output.samples.txt")
+    rrKubiosGqrsLead1File = makeFilename(args['record1Name'], ".gqrs-lead1.rr.kubios.txt")
+
+    saveInsteadOfPlot = True if args['output'] else False
+    outputFilename = makeFilename(args['record1Name'], ".output.gqrs-lead1.png") if args['output'] else None
 
     times, samples = readSamples(samplesCsvFile)
     timesGqrsLead1, valuesGqrsLead1 = readKubiosRR(rrKubiosGqrsLead1File)
-    
-    plotRR(times, samples['leadI'], timesGqrsLead1, valuesGqrsLead1, "LeadI - GQRS", "leadI", "gqrs")
+   
+    if args['output'] and os.path.isfile(outputFilename):
+      print("Info: output file (%s) already exists, skipping." % (outputFilename))
+    else:
+      plotRR(times, samples['leadI'], timesGqrsLead1, valuesGqrsLead1, "LeadI - GQRS", "leadI", "gqrs", saveInsteadOfPlot, outputFilename)
 
   if args['plot_compare_record12_with_rr_gqrs']:
     print(" *** Plotting to compare LeadI from records 1 and 2 with RR calculated by GQRS.")
 
-    r1SamplesCsvFile = CURR_DIR + "/" + args['record1Name'] + ".output.samples.txt"
-    r2SamplesCsvFile = CURR_DIR + "/" + args['record2Name'] + ".output.samples.txt"
-    r1rrKubiosGqrsLead1File = CURR_DIR + "/" + args['record1Name'] + ".gqrs-lead1.rr.kubios.txt"
-    r2rrKubiosGqrsLead1File = CURR_DIR + "/" + args['record2Name'] + ".gqrs-lead1.rr.kubios.txt"
+    r1SamplesCsvFile = makeFilename(args['record1Name'], ".output.samples.txt")
+    r2SamplesCsvFile = makeFilename(args['record2Name'],  ".output.samples.txt")
+    r1rrKubiosGqrsLead1File = makeFilename(args['record1Name'], ".gqrs-lead1.rr.kubios.txt")
+    r2rrKubiosGqrsLead1File = makeFilename(args['record2Name'], ".gqrs-lead1.rr.kubios.txt")
 
     r1Times, r1Samples = readSamples(r1SamplesCsvFile)
     r2Times, r2Samples = readSamples(r2SamplesCsvFile)
@@ -410,8 +425,8 @@ def main():
   if args['plot_compare_leadI_with_rr_gqrs_interpolated']:
     print(" *** Plot to compare leadI from record1 with RR interpolated or not.")
 
-    samplesCsvFile = CURR_DIR + "/" + args['record1Name'] + ".output.samples.txt"
-    rrKubiosGqrsLead1File = CURR_DIR + "/" + args['record1Name'] + ".gqrs-lead1.rr.kubios.txt"
+    samplesCsvFile = makeFilname(args['record1Name'], ".output.samples.txt")
+    rrKubiosGqrsLead1File = makeFilename(args['record1Name'], ".gqrs-lead1.rr.kubios.txt")
 
     times, samples = readSamples(samplesCsvFile)
     rrTimes, rrValues = readKubiosRR(rrKubiosGqrsLead1File)
