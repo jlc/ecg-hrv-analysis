@@ -73,8 +73,7 @@ OUTPUT_FILE=$RECORD_WORK_FILE.output.gethrv-gqrs-lead1.verbose.txt
 OUTPUT_COMMANDS=$RECORD_WORK_FILE.output.cmds.txt
 DATE=`date`
 echo " -- ($DATE) -- Commands exectuted to calculate the HRV." > $OUTPUT_COMMANDS
-echo " --# " >> $OUTPUT_COMMANDS
-
+echo " -- " >> $OUTPUT_COMMANDS
 
 
 if [[ -e $RECORD_FILE_HEA &&
